@@ -34,7 +34,6 @@ const userSchema = new Schema(
     },
     refreshToken: {
       type: String,
-      required: true,
     },
     avatar: {
       type: String, // use cloudinary
@@ -79,7 +78,7 @@ userSchema.methods.generateAccessToken = function () {
 );
 };
 
-userSchema.methods.refreshToken = function() {
+userSchema.methods.generateRefreshToken = function() {
     return jwt.sign(
         {
             _id: this._id,
