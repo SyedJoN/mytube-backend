@@ -76,7 +76,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const generateAccessAndRefreshToken = async (userId) => {
   try {
-    const user = await User.findOne({userId});
+    const user = await User.findOne(userId);
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
     user.refreshToken = refreshToken;
@@ -102,8 +102,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const {username, email, password} = req.body;
 
-  if (!username || !email) {
-    throw new ApiError(400, "username or email is incorrect!");
+  if (!username && !email) {
+    throw new ApiError(400, "username or email is required!");
   }
 
   const user = await User.findOne({
@@ -153,15 +153,15 @@ const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
     {
-      $set: {
-        refreshToken: undefined,
+      $unset: {
+        refreshToken: 1,
       },
     },
     {
       new: true,
     }
   );
-
+console.log(User)
   const options = {
     httpOnly: true,
     secure: true,
