@@ -4,6 +4,7 @@ import {User} from "../models/user.model.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
+import { deleteFromCloudinary } from "../utils/deleteFromCloudinary.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   // get user details from frontend
@@ -286,6 +287,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 });
 
 const updateAvatar = asyncHandler(async (req, res) => {
+  const oldFilePath = req.user?.file;
   const avatarLocalPath = req.file?.path;
 
   if (!avatarLocalPath) {
@@ -306,6 +308,8 @@ const updateAvatar = asyncHandler(async (req, res) => {
     },
     {new: true}
   ).select("-password");
+
+  deleteFromCloudinary(oldFilePath)
 
   return res
     .status(200)
@@ -333,6 +337,9 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     },
     {new: true}
   ).select("-password");
+
+  deleteFromCloudinary(oldFilePath)
+
 
   return res
     .status(200)
