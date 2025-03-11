@@ -242,7 +242,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const isPasswordValid = await user.isPasswordCorrect(oldPassword);
+  const isPasswordValid = await user.IsPasswordCorrect(oldPassword);
 
   if (!isPasswordValid) {
     throw new ApiError(401, "Invalid old password");
@@ -250,6 +250,15 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 
   user.password = newPassword;
   await user.save({validateBeforeSave: false});
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(
+      200,
+      {},
+      "password changed successfully!"
+      ));
+
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
@@ -318,6 +327,7 @@ const updateAvatar = asyncHandler(async (req, res) => {
 });
 
 const updateCoverImage = asyncHandler(async (req, res) => {
+  const oldFilePath = req.user?.file;
   const coverImageLocalPath = req.file?.path;
 
   if (!coverImageLocalPath) {
@@ -349,7 +359,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
-    const username = req.params;
+    const {username} = req.params;
 
     if (!username?.trim()) {
       throw new ApiError(400, "username not found!")
@@ -358,7 +368,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     const channel = await User.aggregate([
       {
         $match: {
-          username: username.toLowerCase()
+          username: username?.toLowerCase()
         }
       },
       {
@@ -389,9 +399,9 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         },
         isSubscribedTo: {
           $cond: {
-            $if: {$in: [req.user?._id, "subscribers.subcriber"]},
-            $then: true,
-            $else: false
+            if: {$in: [req.user?._id, "$subscribers.subcriber"]},
+            then: true,
+            else: false
           }
         }
     }
@@ -409,13 +419,20 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     }
    }
     ])
+    return res
+    .status(200)
+    .json(
+      new ApiResponse(200,
+         channel,
+        "watch history fetched successfully!")
+    )
 })
 
 const getWatchHistory = asyncHandler(async (req, res) => {
   const user = await User.aggregate([
     {
       $match: {
-        _id: new mongoose.Schema.Types.ObjectId(req.user._id)
+        _id: new mongoose.Types.ObjectId(req.user._id)
       }
     },
     {
@@ -457,8 +474,9 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 .status(200)
 .json(
   new ApiResponse(200,
-     user[0].watchHistory,
-    "watch history fetched successfully!")
+    user[0].watchHistory,
+    "watch history fetched successfully!",
+    )
 )
 })
 
