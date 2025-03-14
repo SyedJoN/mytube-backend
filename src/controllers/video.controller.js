@@ -133,7 +133,9 @@ const publishVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are required!");
   }
 
-  const existingVideo = await Video.findOne({title});
+ const existingVideo = await Video.findOne({
+  $or: [{ title }, { videoFile: videoFile.url }],
+});
 
   if (existingVideo) {
     throw new ApiError(400, "Video with the same title already exists!");
@@ -244,7 +246,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(505, "Video not found!");
   }
 
-  const cloudinaryVar = deleteFromCloudinary(video.videoFile);
+ deleteFromCloudinary(video.videoFile);
 
   const deletedVideo = await Video.findByIdAndDelete(id);
 
