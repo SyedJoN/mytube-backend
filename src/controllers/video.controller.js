@@ -136,9 +136,8 @@ const publishVideo = asyncHandler(async (req, res) => {
   const existingVideo = await Video.findOne({title});
 
   if (existingVideo) {
-    throw new ApiError(400, "Video with the same title already exists!")
+    throw new ApiError(400, "Video with the same title already exists!");
   }
-  
 
   let videoLocalPath;
   if (req.file) {
@@ -247,10 +246,57 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
   const cloudinaryVar = deleteFromCloudinary(video.videoFile);
 
-  await Video.findByIdAndDelete(id);
+  const deletedVideo = await Video.findByIdAndDelete(id);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, cloudinaryVar, "Video deleted successfully!"));
+    .json(new ApiResponse(200, deletedVideo, "Video deleted successfully!"));
 });
-export {getAllVideos, publishVideo, getVideoById, updateVideo, deleteVideo};
+
+const togglePublishStatus = asyncHandler(async (req, res) => {
+  const {id} = req.params;
+
+  if (!id) {
+    throw new ApiError("400", "ID is required!");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid ID Format!");
+  }
+
+  const videoStatus = await Video.findByIdAndUpdate(
+    id,
+    [
+      { 
+        $set: { 
+          isPublished: { $not: "$isPublished" } 
+      } 
+    }
+  ]
+    , 
+    { new: true }
+  );
+  
+  
+
+  if (!videoStatus) {
+    throw new ApiError(404, "Video not found!");
+  }
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        videoStatus,
+        `Video is ${videoStatus.isPublished === true ? "published" : "unpublished"} successfully!`
+      )
+    );
+});
+export {
+  getAllVideos,
+  publishVideo,
+  getVideoById,
+  updateVideo,
+  deleteVideo,
+  togglePublishStatus,
+};
