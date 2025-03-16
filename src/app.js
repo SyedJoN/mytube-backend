@@ -25,6 +25,14 @@ app.use(
 app.use(express.static("public"));
 app.use(cookieParser());
 
+app.use((err, req, res, next) => {
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
+});
+
+
 //routes import
 
 import healthcheckRouter from "./routes/healthcheck.route.js"

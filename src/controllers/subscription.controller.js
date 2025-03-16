@@ -43,13 +43,20 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
     const {channelId} = req.params;
 
-    
+    console.log("Received channelId:", channelId);
+    console.log("Is Valid ObjectId:", mongoose.Types.ObjectId.isValid(channelId));
     if (!channelId) {
         throw new ApiError(400, "Id is required!")
     }
     if (!mongoose.Types.ObjectId.isValid(channelId)) {
         throw new ApiError(400, "Invalid id format!")
     }
+
+    const channelExists = await Subscription.findOne({ channel: channelId });
+
+if (!channelExists) {
+    throw new ApiError(404, "Channel not found!");
+}
 
     const userChannelSubscribers = await Subscription.find({channel: channelId}).populate({
         path: "subscriber",
