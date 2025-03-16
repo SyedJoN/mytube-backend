@@ -15,7 +15,7 @@ router.route("/edit/:id").patch(verifyJWT, updateVideo);
 
 router.route("/delete/:id").delete(verifyJWT, deleteVideo)
 
-router.route("/publish-status/:id").patch(verifyJWT, togglePublishStatus)
+router.route("/:id/publish-status/").patch(verifyJWT, togglePublishStatus)
 
 
 

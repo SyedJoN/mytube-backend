@@ -302,7 +302,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 });
 
 const updateAvatar = asyncHandler(async (req, res) => {
-  const oldFilePath = req.user?.file;
+  const oldFilePath = req.user?.avatar;
   const avatarLocalPath = req.file?.path;
 
   if (!avatarLocalPath) {
@@ -434,6 +434,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
 })
 
 const getWatchHistory = asyncHandler(async (req, res) => {
+  
   const user = await User.aggregate([
     {
       $match: {
