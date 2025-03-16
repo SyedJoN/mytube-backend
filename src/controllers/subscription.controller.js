@@ -43,8 +43,6 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
     const {channelId} = req.params;
 
-    console.log("Received channelId:", channelId);
-    console.log("Is Valid ObjectId:", mongoose.Types.ObjectId.isValid(channelId));
     if (!channelId) {
         throw new ApiError(400, "Id is required!")
     }
