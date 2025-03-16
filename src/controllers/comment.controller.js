@@ -69,7 +69,7 @@ const addComment = asyncHandler(async (req, res) => {
   }
 
   const commentOnVideo = await Comment.create({
-    content: content,
+    content,
     owner: userId,
     video: videoId,
   });
