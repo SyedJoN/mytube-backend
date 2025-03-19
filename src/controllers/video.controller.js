@@ -104,6 +104,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
       description: 1,
       thumbnail: 1,
       views: 1,
+      duration: 1,
       owner: 1,
       createdAt: 1,
     },
@@ -134,7 +135,7 @@ const publishVideo = asyncHandler(async (req, res) => {
   }
 
  const existingVideo = await Video.findOne({
-  $or: [{ title }, { videoFile: videoFile.url }],
+  $or: [{ title }],
 });
 
   if (existingVideo) {
@@ -294,6 +295,20 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
       )
     );
 });
+
+const incrementViews = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  if (!videoId) throw new ApiError(400, "ID is required!");
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, "Invalid video ID format!");
+
+  const video = await Video.findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true });
+
+  if (!video) throw new ApiError(404, "Video not found!");
+
+  return res.status(200).json(new ApiResponse(200, video.views, "View count updated!"));
+});
+
 export {
   getAllVideos,
   publishVideo,
@@ -301,4 +316,5 @@ export {
   updateVideo,
   deleteVideo,
   togglePublishStatus,
+  incrementViews
 };
