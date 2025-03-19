@@ -179,7 +179,7 @@ const publishVideo = asyncHandler(async (req, res) => {
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
-  const {id} = req.params;
+  const { videoId } = req.params;
 
   if (!id) {
     throw new ApiError(400, "ID is required!");
@@ -199,7 +199,7 @@ const getVideoById = asyncHandler(async (req, res) => {
 });
 const updateVideo = asyncHandler(
   asyncHandler(async (req, res) => {
-    const {id} = req.params;
+    const { videoId } = req.params;
     const {title, description} = req.body;
 
     if (!id) {
@@ -232,7 +232,7 @@ const updateVideo = asyncHandler(
   })
 );
 const deleteVideo = asyncHandler(async (req, res) => {
-  const {id} = req.params;
+  const { videoId } = req.params;
 
   if (!id) {
     throw new ApiError("400", "ID is required!");
@@ -257,7 +257,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
-  const {id} = req.params;
+  const { videoId } = req.params;
 
   if (!id) {
     throw new ApiError("400", "ID is required!");
@@ -302,7 +302,7 @@ const incrementViews = asyncHandler(async (req, res) => {
   if (!videoId) throw new ApiError(400, "ID is required!");
   if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, "Invalid video ID format!");
 
-  const video = await Video.findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true });
+  const video = await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } }, { new: true });
 
   if (!video) throw new ApiError(404, "Video not found!");
 
