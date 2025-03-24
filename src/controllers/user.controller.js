@@ -429,7 +429,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(200,
          channel,
-        "watch history fetched successfully!")
+        "User details fetched successfully!")
     )
 })
 

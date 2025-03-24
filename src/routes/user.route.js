@@ -43,7 +43,7 @@ router.route("/avatar").patch(verifyJWT, upload.single("avatar"), updateAvatar);
 router
   .route("/cover-image")
   .patch(verifyJWT, upload.single("coverImage"), updateCoverImage);
-router.route("/channel/:username").get(verifyJWT, getUserChannelProfile);
+router.route("/channel/:username").get(getUserChannelProfile);
 router.route("/history").get(verifyJWT, getWatchHistory);
 
 export default router;

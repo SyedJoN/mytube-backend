@@ -17,7 +17,7 @@ router.route("/delete/:videoId").delete(verifyJWT, deleteVideo)
 
 router.route("/:videoId/publish-status/").patch(verifyJWT, togglePublishStatus)
 
-router.route("/:videoId/watch").post(incrementViews)
+router.route("/:videoId/view").post(incrementViews)
 
 
 

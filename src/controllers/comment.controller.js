@@ -7,7 +7,6 @@ import {ApiResponse} from "../utils/apiResponse.js";
 
 const getVideoComments = asyncHandler(async (req, res) => {
   const {videoId} = req.params;
-  const {page = 1, limit = 10} = req.query;
 
   if (!videoId) {
     throw new ApiError(400, "id is required!");
@@ -16,16 +15,11 @@ const getVideoComments = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Incorrect id format!");
   }
 
-  const pageNumber = parseInt(page, 10);
-  const limitNumber = parseInt(limit, 10);
-  const skip = (pageNumber - 1) * limitNumber;
 
   const videoComments = await Comment.find({
     video: videoId,
   })
     .sort({createdAt: -1})
-    .skip(skip)
-    .limit(limitNumber)
     .populate("owner", "username avatar");
 
     if (!videoComments) {

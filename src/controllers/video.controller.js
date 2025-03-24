@@ -181,14 +181,17 @@ const publishVideo = asyncHandler(async (req, res) => {
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
-  if (!id) {
+  if (!videoId) {
     throw new ApiError(400, "ID is required!");
   }
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
     throw new ApiError(400, "Invalid video ID format!");
   }
 
-  const video = await Video.findById(id);
+  const video = await Video.findById(videoId).populate(
+    "owner",
+    "-refreshToken -watchHistory -password -createdAt -updatedAt -coverImage -email"
+  );
 
   if (!video) {
     throw new ApiError(404, "Video not found!");
@@ -202,15 +205,15 @@ const updateVideo = asyncHandler(
     const { videoId } = req.params;
     const {title, description} = req.body;
 
-    if (!id) {
+    if (!videoId) {
       throw new ApiError("400", "ID is required!");
     }
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
       throw new ApiError(400, "Invalid ID Format!");
     }
 
     const video = await Video.findByIdAndUpdate(
-      id,
+      videoId,
       {
         $set: {
           title,
@@ -234,14 +237,14 @@ const updateVideo = asyncHandler(
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
-  if (!id) {
+  if (!videoId) {
     throw new ApiError("400", "ID is required!");
   }
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
     throw new ApiError(400, "Invalid ID Format!");
   }
-  const video = await Video.findById(id);
+  const video = await Video.findById(videoId);
 
   if (!video) {
     throw new ApiError(505, "Video not found!");
@@ -249,7 +252,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
  deleteFromCloudinary(video.videoFile);
 
-  const deletedVideo = await Video.findByIdAndDelete(id);
+  const deletedVideo = await Video.findByIdAndDelete(videoId);
 
   return res
     .status(200)
@@ -259,16 +262,16 @@ const deleteVideo = asyncHandler(async (req, res) => {
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
-  if (!id) {
+  if (!videoId) {
     throw new ApiError("400", "ID is required!");
   }
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
     throw new ApiError(400, "Invalid ID Format!");
   }
 
   const videoStatus = await Video.findByIdAndUpdate(
-    id,
+    videoId,
     [
       { 
         $set: { 
