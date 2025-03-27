@@ -125,10 +125,6 @@ const getVideoLikes = asyncHandler(async (req, res) => {
 
   const videoLikes = await Like.countDocuments({video: videoId});
 
-  if (!videoLikes) {
-    throw new ApiError(400, "video Likes not found!");
-  }
-
   return res
     .status(200)
     .json(
