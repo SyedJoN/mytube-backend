@@ -2,6 +2,7 @@ import {asyncHandler} from "../utils/asyncHandler.js";
 import {Video} from "../models/video.model.js";
 import {ApiError} from "../utils/ApiError.js";
 import mongoose from "mongoose";
+import { Like } from "../models/like.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import {deleteFromCloudinary} from "../utils/deleteFromCloudinary.js";
@@ -23,28 +24,28 @@ const getAllVideos = asyncHandler(async (req, res) => {
     },
   });
 
-  //   if (query) {
-  //     pipeline.push({
-  //       $match: {
-  //         $or: [
-  //           {title: {$regex: query, $options: "i"}},
-  //           {description: {$regex: value, $options: "i"}},
-  //         ],
-  //       },
-  //     });
-  //   }
-
-  if (query) {
+    if (query) {
     pipeline.push({
-      $search: {
-        index: "search-videos",
-        text: {
-          query: query,
-          path: ["title", "description"],
-        },
+      $match: {
+        $or: [
+          { title: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+        ],
       },
     });
   }
+
+  // if (query) {
+  //   pipeline.push({
+  //     $search: {
+  //       index: "search-videos",
+  //       text: {
+  //         query: query,
+  //         path: ["title", "description"],
+  //       },
+  //     },
+  //   });
+  // }
 
   // if (userId && mongoose.Types.ObjectId.isValid(userId)) {
   //   pipeline.push({
@@ -196,9 +197,15 @@ const getVideoById = asyncHandler(async (req, res) => {
   if (!video) {
     throw new ApiError(404, "Video not found!");
   }
+
+  const likesCount = await Like.countDocuments({video: videoId})
+
+  const videoWithLikes = video.toObject(); 
+
+  videoWithLikes.likesCount = likesCount;
   return res
     .status(200)
-    .json(new ApiResponse(200, video, "Video fetched successfully!"));
+    .json(new ApiResponse(200, videoWithLikes, "Video fetched successfully!"));
 });
 const updateVideo = asyncHandler(
   asyncHandler(async (req, res) => {

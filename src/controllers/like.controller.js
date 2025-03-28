@@ -1,8 +1,55 @@
 import mongoose from "mongoose";
 import {Like} from "../models/like.model.js";
+import { Dislike } from "../models/dislike.model.js";
+import { Video } from "../models/video.model.js";
+import { Comment } from "../models/comment.model.js";
 import {ApiError} from "../utils/ApiError.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import {ApiResponse} from "../utils/apiResponse.js";
+
+
+
+const toggleLike = (entity) => asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const userId = req.user?._id;
+
+  if (!id) throw new ApiError(400, `${entity} ID is required!`);
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, `Invalid ${entity} ID format!`);
+
+  const likeQuery = { [entity]: id, likedBy: userId };
+  const dislikeQuery = { [entity]: id, dislikedBy: userId };
+
+  let entityExists;
+
+  if (entity === "video") {
+    entityExists = await Video.findById(id);
+  } else if (entity === "comment") {
+    entityExists = await Comment.findById(id);
+  } else {
+    throw new ApiError(400, "Invalid entity type! Must be 'video' or 'comment'.");
+  }
+
+  if (!entityExists) {
+    throw new ApiError(404, `${entity} not found!`);
+  }
+
+  // Remove existing dislike if present
+  const existingDislike = await Dislike.findOne(dislikeQuery);
+  if (existingDislike) {
+    await Dislike.findByIdAndDelete(existingDislike._id);
+  }
+
+  // Check if the user already liked the entity
+  const existingLike = await Like.findOne(likeQuery);
+  if (existingLike) {
+    await Like.findByIdAndDelete(existingLike._id);
+    return res.status(200).json(new ApiResponse(200, {}, `${entity} unliked successfully!`));
+  }
+
+  // Otherwise, add a new like
+  await Like.create(likeQuery);
+  return res.status(200).json(new ApiResponse(200, {}, `${entity} liked successfully!`));
+});
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
   const {videoId} = req.params;
@@ -131,4 +178,4 @@ const getVideoLikes = asyncHandler(async (req, res) => {
       new ApiResponse(200, videoLikes, "Video likes fetched successfully!")
     );
 });
-export {toggleCommentLike, toggleTweetLike, toggleVideoLike, getLikedVideos, getVideoLikes};
+export {toggleLike, getLikedVideos, getVideoLikes};
