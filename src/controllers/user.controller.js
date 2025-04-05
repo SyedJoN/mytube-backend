@@ -8,17 +8,7 @@ import { deleteFromCloudinary } from "../utils/deleteFromCloudinary.js";
 import mongoose from "mongoose";
 
 const registerUser = asyncHandler(async (req, res) => {
-  // get user details from frontend
-  // validation - not empty
-  // check if the user already exists?
-  // check for images, check for avatar
-  // upload to cloudinary and check avatar again
-  // create user object, create entry in db
-  // remove password and refresh token field from response
-  // check for user creation
-  // return res
-
-  const {email, username, password, fullName} = req.body;
+  const { email, username, password, fullName } = req.body;
 
   if (
     [fullName, email, username, password].some((field) => field?.trim() === "")
@@ -27,43 +17,38 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   const existedUser = await User.findOne({
-    $or: [{email}, {username}],
+    $or: [{ email }, { username }],
   });
   if (existedUser) {
     throw new ApiError(409, "User with email or username already exists!");
   }
 
-  const avatarLocalPath = req.files?.avatar[0]?.path;
-  // const coverImageLocalPath = req.files?.coverImage[0]?.path;
+  // Default values to avoid undefined errors
+  let avatar = { url: "" };
+  let coverImage = { url: "" };
 
+  if (req.files?.avatar?.[0]?.path) {
+    const avatarLocalPath = req.files.avatar[0].path;
+    avatar = await uploadOnCloudinary(avatarLocalPath);
 
-  let coverImageLocalPath;
-  if (
-    req.files &&
-    Array.isArray(req.files.coverImage) &&
-    req.files.coverImage.length > 0
-  ) {
-    coverImageLocalPath = req.files.coverImage[0].path;
-  } 
-
-  if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar is required!");
+    if (!avatar) {
+      throw new ApiError(400, "Failed to upload avatar to Cloudinary");
+    }
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  if (req.files?.coverImage?.[0]?.path) {
+    const coverImageLocalPath = req.files.coverImage[0].path;
+    coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
-
-  if (!avatar) {
-    throw new ApiError(400, "Something went wrong while uploading on cloudinary");
+    if (!coverImage) {
+      throw new ApiError(400, "Failed to upload cover image to Cloudinary");
+    }
   }
-
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
-
 
   const user = await User.create({
     fullName,
-    avatar: avatar.url,
-    coverImage: coverImage?.url || "",
+    avatar: avatar.url, 
+    coverImage: coverImage.url,
     email,
     password,
     username: username.toLowerCase(),
@@ -81,6 +66,7 @@ const registerUser = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(200, createdUser, "User registered successfully!"));
 });
+
 
 const generateAccessAndRefreshToken = async (userId) => {
   try {
@@ -138,6 +124,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
+    sameSite: "None",
   };
 
   return res
@@ -169,10 +156,10 @@ const logoutUser = asyncHandler(async (req, res) => {
       new: true,
     }
   );
-  console.log(User);
-  const options = {
+   const options = {
     httpOnly: true,
     secure: true,
+    sameSite: "None",
   };
 
   return res
@@ -209,6 +196,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     const options = {
       httpOnly: true,
       secure: true,
+      sameSite: "None",
     };
 
     const {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(
@@ -267,14 +255,14 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        req.user,
-        "User fetched successfully!"));
+
+  if (!req.user) {
+    throw new ApiError(401, "User not authenticated!");
+  }
+
+  return res.status(200).json(new ApiResponse(200, req.user, "User fetched successfully!"));
 });
+
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const {email, fullName} = req.body;
@@ -366,6 +354,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 const getUserChannelProfile = asyncHandler(async (req, res) => {
     const {username} = req.params;
 
+
     if (!username?.trim()) {
       throw new ApiError(400, "username not found!")
     }
@@ -404,7 +393,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         },
         isSubscribedTo: {
           $cond: {
-            if: {$in: [req.user?._id, "$subscribers.subcriber"]},
+            if: {$in: [req.user?._id, "$subscribers.subscriber"]},
             then: true,
             else: false
           }
@@ -438,7 +427,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   const user = await User.aggregate([
     {
       $match: {
-        _id: new mongoose.Types.ObjectId(req.user._id)
+        _id: mongoose.Types.ObjectId(req.user._id)
       }
     },
     {

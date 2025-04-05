@@ -5,6 +5,7 @@ import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/apiResponse.js";
+import { Dislike } from "../models/dislike.model.js";
 
 // ✅ Get Comments with Replies and Like Count
 const getVideoComments = asyncHandler(async (req, res) => {
@@ -17,25 +18,45 @@ const getVideoComments = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid Video ID format!");
   }
 
-  // ✅ Fetch first-level comments (parentCommentId: null)
   const videoComments = await Comment.find({ video: videoId, parentCommentId: null })
     .sort({ createdAt: -1 })
-    .populate("owner", "username avatar") // Fetch owner details
-    .lean(); // Convert Mongoose docs to plain objects for easy modification
+    .populate("owner", "username avatar")
+    .lean();
 
-  // ✅ Fetch replies for each first-level comment
-  for (let comment of videoComments) {
-    // Fetch replies
+  const getLikesAndDislikes = async (commentId) => {
+    const likes = await Like.countDocuments({ comment: commentId });
+    const likedBy = await Like.find({ comment: commentId}).select('likedBy');
+    const dislikedBy = await Dislike.find({ comment: commentId}).select('dislikedBy');
+
+    return {
+      likesCount: likes,
+      likedBy: likedBy.map((like) => like.likedBy),
+      dislikedBy: dislikedBy.map((dislike) => dislike.dislikedBy)
+    };
+  };
+
+  const commentLikesDislikes = await Promise.all(
+    videoComments.map(async (comment) => {
+      const { likesCount, likedBy, dislikedBy } = await getLikesAndDislikes(comment._id);
+      return { comment, likesCount, likedBy, dislikedBy };
+    })
+  );
+
+  for (let { comment, likesCount, likedBy, dislikedBy } of commentLikesDislikes) {
+    comment.likesCount = likesCount;
+    comment.LikedBy = likedBy;
+    comment.DislikedBy = dislikedBy;
+
     comment.replies = await Comment.find({ parentCommentId: comment._id })
       .populate("owner", "username avatar")
       .lean();
 
-    // ✅ Count likes for each first-level comment
-    comment.likesCount = await Like.countDocuments({ comment: comment._id });
 
-    // ✅ Count likes for each reply
     for (let reply of comment.replies) {
-      reply.likesCount = await Like.countDocuments({ comment: reply._id });
+      const { likesCount, likedBy, dislikedBy } = await getLikesAndDislikes(reply._id);
+      reply.likesCount = likesCount;
+      reply.LikedBy = likedBy;
+      reply.DislikedBy = dislikedBy;
     }
   }
 

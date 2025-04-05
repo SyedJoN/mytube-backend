@@ -2,7 +2,8 @@ import {asyncHandler} from "../utils/asyncHandler.js";
 import {Video} from "../models/video.model.js";
 import {ApiError} from "../utils/ApiError.js";
 import mongoose from "mongoose";
-import { Like } from "../models/like.model.js";
+import {Like} from "../models/like.model.js";
+import { Dislike } from "../models/dislike.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import {deleteFromCloudinary} from "../utils/deleteFromCloudinary.js";
@@ -24,12 +25,12 @@ const getAllVideos = asyncHandler(async (req, res) => {
     },
   });
 
-    if (query) {
+  if (query) {
     pipeline.push({
       $match: {
         $or: [
-          { title: { $regex: query, $options: "i" } },
-          { description: { $regex: query, $options: "i" } },
+          {title: {$regex: query, $options: "i"}},
+          {description: {$regex: query, $options: "i"}},
         ],
       },
     });
@@ -135,9 +136,9 @@ const publishVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are required!");
   }
 
- const existingVideo = await Video.findOne({
-  $or: [{ title }],
-});
+  const existingVideo = await Video.findOne({
+    $or: [{title}],
+  });
 
   if (existingVideo) {
     throw new ApiError(400, "Video with the same title already exists!");
@@ -180,7 +181,7 @@ const publishVideo = asyncHandler(async (req, res) => {
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const {videoId} = req.params;
 
   if (!videoId) {
     throw new ApiError(400, "ID is required!");
@@ -198,18 +199,24 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found!");
   }
 
-  const likesCount = await Like.countDocuments({video: videoId})
+  const likesCount = await Like.countDocuments({video: videoId});
+    const likedBy = await Like.find({ video: videoId}).select('likedBy');
+    const dislikedBy = await Dislike.find({ video: videoId}).select('dislikedBy');
 
-  const videoWithLikes = video.toObject(); 
+  const videoWithLikes = video.toObject();
 
   videoWithLikes.likesCount = likesCount;
+  videoWithLikes.likedBy = likedBy.map((like) => like.likedBy);
+videoWithLikes.disLikedBy = dislikedBy.map((dislike) => dislike.dislikedBy);
+
+
   return res
     .status(200)
     .json(new ApiResponse(200, videoWithLikes, "Video fetched successfully!"));
 });
 const updateVideo = asyncHandler(
   asyncHandler(async (req, res) => {
-    const { videoId } = req.params;
+    const {videoId} = req.params;
     const {title, description} = req.body;
 
     if (!videoId) {
@@ -242,7 +249,7 @@ const updateVideo = asyncHandler(
   })
 );
 const deleteVideo = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const {videoId} = req.params;
 
   if (!videoId) {
     throw new ApiError("400", "ID is required!");
@@ -257,7 +264,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(505, "Video not found!");
   }
 
- deleteFromCloudinary(video.videoFile);
+  deleteFromCloudinary(video.videoFile);
 
   const deletedVideo = await Video.findByIdAndDelete(videoId);
 
@@ -267,7 +274,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const {videoId} = req.params;
 
   if (!videoId) {
     throw new ApiError("400", "ID is required!");
@@ -280,17 +287,14 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
   const videoStatus = await Video.findByIdAndUpdate(
     videoId,
     [
-      { 
-        $set: { 
-          isPublished: { $not: "$isPublished" } 
-      } 
-    }
-  ]
-    , 
-    { new: true }
+      {
+        $set: {
+          isPublished: {$not: "$isPublished"},
+        },
+      },
+    ],
+    {new: true}
   );
-  
-  
 
   if (!videoStatus) {
     throw new ApiError(404, "Video not found!");
@@ -307,16 +311,23 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
 });
 
 const incrementViews = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  const {videoId} = req.params;
 
   if (!videoId) throw new ApiError(400, "ID is required!");
-  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, "Invalid video ID format!");
+  if (!mongoose.Types.ObjectId.isValid(videoId))
+    throw new ApiError(400, "Invalid video ID format!");
 
-  const video = await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } }, { new: true });
+  const video = await Video.findByIdAndUpdate(
+    videoId,
+    {$inc: {views: 1}},
+    {new: true}
+  );
 
   if (!video) throw new ApiError(404, "Video not found!");
 
-  return res.status(200).json(new ApiResponse(200, video.views, "View count updated!"));
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video.views, "View count updated!"));
 });
 
 export {
@@ -326,5 +337,5 @@ export {
   updateVideo,
   deleteVideo,
   togglePublishStatus,
-  incrementViews
+  incrementViews,
 };

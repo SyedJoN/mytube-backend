@@ -9,7 +9,7 @@ import {ApiResponse} from "../utils/apiResponse.js";
 
 
 
-const toggleLike = (entity) => asyncHandler(async (req, res, next) => {
+const toggleLike = (entity) => asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user?._id;
 
@@ -33,20 +33,19 @@ const toggleLike = (entity) => asyncHandler(async (req, res, next) => {
     throw new ApiError(404, `${entity} not found!`);
   }
 
-  // Remove existing dislike if present
+
   const existingDislike = await Dislike.findOne(dislikeQuery);
   if (existingDislike) {
     await Dislike.findByIdAndDelete(existingDislike._id);
   }
 
-  // Check if the user already liked the entity
+
   const existingLike = await Like.findOne(likeQuery);
   if (existingLike) {
     await Like.findByIdAndDelete(existingLike._id);
     return res.status(200).json(new ApiResponse(200, {}, `${entity} unliked successfully!`));
   }
 
-  // Otherwise, add a new like
   await Like.create(likeQuery);
   return res.status(200).json(new ApiResponse(200, {}, `${entity} liked successfully!`));
 });
