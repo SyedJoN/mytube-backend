@@ -1,4 +1,3 @@
-# backend project practice
+# backend project 
 
-This is a practice project to master my backend skills
-
+This is a backend of mytube application.
