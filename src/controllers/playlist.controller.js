@@ -66,7 +66,6 @@ const getPlaylistById = asyncHandler(async (req, res) => {
 const playlist = await Playlist.findById(playlistId)
   .populate({
     path: "videos",
-    options: { sort: { createdAt: -1 } },
     populate: {
       path: "owner",
     }
