@@ -63,7 +63,14 @@ const getPlaylistById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid playlist id format!");
   }
  
-  const playlist = await Playlist.findById(playlistId).populate("videos").sort({createdAt: -1});
+const playlist = await Playlist.findById(playlistId)
+  .populate({
+    path: "videos",
+    options: { sort: { createdAt: -1 } },
+    populate: {
+      path: "owner",
+    }
+  }).populate(("owner"));
 
   if (!playlist) {
     throw new ApiError(404, "Playlist not found!")
