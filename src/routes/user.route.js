@@ -1,6 +1,7 @@
 import {Router} from "express";
 import { optionalJWT } from "../middlewares/optionalJWT.js";
 import {
+  addOrUpdateWatchHistory,
   changeCurrentPassword,
   getCurrentUser,
   getUserChannelProfile,
@@ -46,5 +47,6 @@ router
   .patch(verifyJWT, upload.single("coverImage"), updateCoverImage);
 router.route("/channel/:username").get(optionalJWT, getUserChannelProfile);
 router.route("/history").get(verifyJWT, getWatchHistory);
+router.route("/history").post(verifyJWT, addOrUpdateWatchHistory)
 
 export default router;

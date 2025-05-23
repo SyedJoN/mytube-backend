@@ -6,7 +6,7 @@ import {Video} from "../models/video.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
 import {deleteFromCloudinary} from "../utils/deleteFromCloudinary.js";
-import mongoose from "mongoose";
+import mongoose, {Mongoose, Schema} from "mongoose";
 import {Playlist} from "../models/playlist.model.js";
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -489,15 +489,18 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   const user = await User.aggregate([
     {
       $match: {
-        _id: mongoose.Types.ObjectId(req.user._id),
+        _id: new mongoose.Types.ObjectId(req.user?._id),
       },
+    },
+    {
+      $unwind: "$watchHistory",
     },
     {
       $lookup: {
         from: "videos",
-        localField: "watchHistory",
+        localField: "watchHistory.video",
         foreignField: "_id",
-        as: "watchHistory",
+        as: "videoDetails",
         pipeline: [
           {
             $lookup: {
@@ -508,9 +511,9 @@ const getWatchHistory = asyncHandler(async (req, res) => {
               pipeline: [
                 {
                   $project: {
-                    fullName: 1,
                     username: 1,
                     avatar: 1,
+                    fullName: 1,
                   },
                 },
               ],
@@ -518,24 +521,90 @@ const getWatchHistory = asyncHandler(async (req, res) => {
           },
           {
             $addFields: {
-              owner: {
-                $first: "$owner",
-              },
+              owner: {$first: "$owner"},
             },
           },
         ],
       },
     },
+    {
+      $addFields: {
+        video: {$first: "$videoDetails"},
+        duration: "$videoDetails.duration",
+        lastWatchedAt: "$videoDetails.lastWatchedAt",
+      },
+    },
+    {
+      $project: {
+        video: 1,
+        duration: 1,
+        lastWatchedAt: 1,
+      },
+    },
+    {
+      $sort: {
+        lastWatchedAt: -1,
+      },
+    },
   ]);
+
   return res
     .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        user[0].watchHistory,
-        "watch history fetched successfully!"
-      )
+    .json(new ApiResponse(200, user, "Watch history fetched successfully!"));
+});
+
+const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  const {videoId, duration} = req.body;
+
+  if (!userId) {
+    throw new ApiError(400, "User Id is required!");
+  }
+  if (!videoId) {
+    throw new ApiError(400, "Video Id is required!");
+  }
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
+    throw new ApiError(400, "Invalid Video Id format!");
+  }
+
+  // update if video already exists.
+
+  const user = await User.findOneAndUpdate(
+    {
+      _id: userId,
+      "watchHistory.video": videoId,
+    },
+    {
+      $set: {
+        "watchHistory.$.duration": duration || 0,
+        "watchHistory.$.lastWatchedAt": new Date(),
+      },
+    },
+    {new: true}
+  );
+  // if video dosent exist, push a new entry.
+  if (!user) {
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $push: {
+          watchHistory: {
+            video: videoId,
+            duration: duration || 0,
+            lastWatchedAt: new Date(),
+          },
+        },
+      },
+      {new: true}
     );
+    return res
+      .status(200)
+      .json(new ApiResponse(200, "Watch history updated successfully!"));
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "User's watch history added successfully!"));
 });
 
 export {
@@ -550,4 +619,5 @@ export {
   updateCoverImage,
   getUserChannelProfile,
   getWatchHistory,
+  addOrUpdateWatchHistory,
 };
