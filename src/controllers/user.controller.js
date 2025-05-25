@@ -557,6 +557,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
   const {videoId, duration} = req.body;
 
+
   if (!userId) {
     throw new ApiError(400, "User Id is required!");
   }
@@ -576,7 +577,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
     },
     {
       $set: {
-        "watchHistory.$.duration": duration || 0,
+        "watchHistory.$.duration": duration,
         "watchHistory.$.lastWatchedAt": new Date(),
       },
     },
@@ -590,7 +591,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
         $push: {
           watchHistory: {
             video: videoId,
-            duration: duration || 0,
+            duration: duration,
             lastWatchedAt: new Date(),
           },
         },
