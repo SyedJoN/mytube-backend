@@ -36,10 +36,12 @@ const userSchema = new Schema(
       type: String,
     },
     avatar: {
-      type: String, // use cloudinary
+      url: {type: String},
+      fileId: {type: String},
     },
     coverImage: {
-      type: String,
+      url: {type: String},
+      fileId: {type: String},
     },
     watchHistory: [
       {
@@ -49,12 +51,12 @@ const userSchema = new Schema(
         },
         duration: {
           type: Number,
-          default: 0
+          default: 0,
         },
         lastWatchedAt: {
           type: Date,
-          default: Date.now
-        }
+          default: Date.now,
+        },
       },
     ],
   },

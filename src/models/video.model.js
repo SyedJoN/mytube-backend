@@ -5,12 +5,12 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 const videoSchema = new Schema(
   {
     videoFile: {
-      type: String, // cloudinary url
-      required: true,
+      url: {type: String, required: true}, 
+      fileId: {type: String, required: true},
     },
     thumbnail: {
-      type: String,
-      required: true,
+      url: { type: String, required: true },       // ImageKit file URL
+      fileId: { type: String, required: true }, 
     },
     title: {
       type: String,
@@ -40,6 +40,6 @@ const videoSchema = new Schema(
   {timestamps: true}
 );
 
-videoSchema.plugin(mongooseAggregatePaginate); 
+videoSchema.plugin(mongooseAggregatePaginate);
 
-export const Video = mongoose.model('Video', videoSchema)
+export const Video = mongoose.model("Video", videoSchema);

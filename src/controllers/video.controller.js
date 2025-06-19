@@ -3,10 +3,12 @@ import {Video} from "../models/video.model.js";
 import {ApiError} from "../utils/ApiError.js";
 import mongoose from "mongoose";
 import {Like} from "../models/like.model.js";
-import { Dislike } from "../models/dislike.model.js";
+import {Dislike} from "../models/dislike.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
-import {uploadOnCloudinary} from "../utils/cloudinary.js";
-import {deleteFromCloudinary} from "../utils/deleteFromCloudinary.js";
+import {uploadOnImageKit} from "../utils/ImageKit.js";
+import {deleteFromImageKit} from "../utils/deleteFromImageKit.js";
+import { extractMetadataAndThumbnail } from "../utils/ffmpeg.js";
+
 
 const getAllVideos = asyncHandler(async (req, res) => {
   // sari queries extract kro userId k sath
@@ -152,26 +154,32 @@ const publishVideo = asyncHandler(async (req, res) => {
   if (!videoLocalPath) {
     throw new ApiError(400, "Video file is required!");
   }
+const {duration, thumbnailPath} =
+    await extractMetadataAndThumbnail(videoLocalPath);
+  const uploadedVideo = await uploadOnImageKit(videoLocalPath);
 
-  const videoFile = await uploadOnCloudinary(videoLocalPath);
-
-  if (!videoFile) {
+  if (!uploadedVideo) {
     throw new ApiError(
       400,
-      "Something went wrong while uploading on cloudinary"
+      "Something went wrong while uploading on ImageKit"
     );
   }
-  const thumbnailUrl = videoFile.public_id
-    ? `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/video/upload/w_400,h_300,c_fill/${videoFile.public_id}.jpg`
-    : "";
+  
+  const uploadedThumbnail = await uploadOnImageKit(thumbnailPath);
 
   const video = await Video.create({
-    videoFile: videoFile.url,
+    videoFile: {
+      url: uploadedVideo.url,
+      fileId: uploadedVideo.fileId,
+    },
+    thumbnail: {
+      url: uploadedThumbnail.url || "",
+      fileId: uploadedThumbnail.fileId,
+    },
     owner: req.user?._id,
     title,
     description,
-    duration: videoFile.duration || 0,
-    thumbnail: thumbnailUrl || "",
+    duration: duration || 0,
     isPublished: true,
   });
 
@@ -200,15 +208,14 @@ const getVideoById = asyncHandler(async (req, res) => {
   }
 
   const likesCount = await Like.countDocuments({video: videoId});
-    const likedBy = await Like.find({ video: videoId}).select('likedBy');
-    const dislikedBy = await Dislike.find({ video: videoId}).select('dislikedBy');
+  const likedBy = await Like.find({video: videoId}).select("likedBy");
+  const dislikedBy = await Dislike.find({video: videoId}).select("dislikedBy");
 
   const videoWithLikes = video.toObject();
 
   videoWithLikes.likesCount = likesCount;
   videoWithLikes.likedBy = likedBy.map((like) => like.likedBy);
-videoWithLikes.disLikedBy = dislikedBy.map((dislike) => dislike.dislikedBy);
-
+  videoWithLikes.disLikedBy = dislikedBy.map((dislike) => dislike.dislikedBy);
 
   return res
     .status(200)
@@ -264,7 +271,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(505, "Video not found!");
   }
 
-  deleteFromCloudinary(video.videoFile);
+  deleteFromImageKit(video.videoFile.fileId);
 
   const deletedVideo = await Video.findByIdAndDelete(videoId);
 
