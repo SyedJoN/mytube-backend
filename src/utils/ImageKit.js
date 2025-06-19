@@ -19,7 +19,6 @@ const uploadOnImageKit = async (localFilePath) => {
       fileName,
     });
 
-    // Clean up local file
     fs.unlinkSync(localFilePath);
 
     return {
@@ -28,7 +27,7 @@ const uploadOnImageKit = async (localFilePath) => {
     };
   } catch (error) {
     console.error("ImageKit Upload Error:", error?.message || error);
-    if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath); // Safe delete
+    if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath); 
     return null;
   }
 };

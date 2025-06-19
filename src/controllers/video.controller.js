@@ -7,8 +7,7 @@ import {Dislike} from "../models/dislike.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import {uploadOnImageKit} from "../utils/ImageKit.js";
 import {deleteFromImageKit} from "../utils/deleteFromImageKit.js";
-import { extractMetadataAndThumbnail } from "../utils/ffmpeg.js";
-
+import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   // sari queries extract kro userId k sath
@@ -154,17 +153,14 @@ const publishVideo = asyncHandler(async (req, res) => {
   if (!videoLocalPath) {
     throw new ApiError(400, "Video file is required!");
   }
-const {duration, thumbnailPath} =
+  const {duration, thumbnailPath, dominantColorHex, darkHoverColorHex, lightTextColorHex} =
     await extractMetadataAndThumbnail(videoLocalPath);
   const uploadedVideo = await uploadOnImageKit(videoLocalPath);
 
   if (!uploadedVideo) {
-    throw new ApiError(
-      400,
-      "Something went wrong while uploading on ImageKit"
-    );
+    throw new ApiError(400, "Something went wrong while uploading on ImageKit");
   }
-  
+
   const uploadedThumbnail = await uploadOnImageKit(thumbnailPath);
 
   const video = await Video.create({
@@ -175,6 +171,9 @@ const {duration, thumbnailPath} =
     thumbnail: {
       url: uploadedThumbnail.url || "",
       fileId: uploadedThumbnail.fileId,
+      dominantColor: dominantColorHex,
+      darkHoverColor: darkHoverColorHex,
+      lightTextColor: lightTextColorHex
     },
     owner: req.user?._id,
     title,

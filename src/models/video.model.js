@@ -5,12 +5,15 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 const videoSchema = new Schema(
   {
     videoFile: {
-      url: {type: String, required: true}, 
+      url: {type: String, required: true},
       fileId: {type: String, required: true},
     },
     thumbnail: {
-      url: { type: String, required: true },       // ImageKit file URL
-      fileId: { type: String, required: true }, 
+      url: {type: String, required: true}, // ImageKit file URL
+      fileId: {type: String, required: true},
+      dominantColor: {type: String},
+      darkHoverColor: {type: String},
+      lightTextColor: {type: String},
     },
     title: {
       type: String,
