@@ -5,8 +5,8 @@ import mongoose from "mongoose";
 import {Like} from "../models/like.model.js";
 import {Dislike} from "../models/dislike.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
-import {uploadOnImageKit} from "../utils/ImageKit.js";
-import {deleteFromImageKit} from "../utils/deleteFromImageKit.js";
+import {uploadToSupabase} from "../utils/SupaBase.js";
+import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -155,13 +155,14 @@ const publishVideo = asyncHandler(async (req, res) => {
   }
   const {duration, thumbnailPath, dominantColorHex, darkHoverColorHex, lightTextColorHex} =
     await extractMetadataAndThumbnail(videoLocalPath);
-  const uploadedVideo = await uploadOnImageKit(videoLocalPath);
+    
+  const uploadedVideo = await uploadToSupabase(videoLocalPath, "videos");
 
   if (!uploadedVideo) {
-    throw new ApiError(400, "Something went wrong while uploading on ImageKit");
+    throw new ApiError(400, "Something went wrong while uploading on Supabase");
   }
 
-  const uploadedThumbnail = await uploadOnImageKit(thumbnailPath);
+  const uploadedThumbnail = await uploadToSupabase(thumbnailPath, "thumbnails");
 
   const video = await Video.create({
     videoFile: {
@@ -270,7 +271,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(505, "Video not found!");
   }
 
-  deleteFromImageKit(video.videoFile.fileId);
+  deleteFromSupabase(video.videoFile.fileId);
 
   const deletedVideo = await Video.findByIdAndDelete(videoId);
 

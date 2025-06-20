@@ -1,11 +1,11 @@
 import {ApiError} from "../utils/ApiError.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import {User} from "../models/user.model.js";
-import {uploadOnImageKit} from "../utils/ImageKit.js";
 import {Video} from "../models/video.model.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
-import {deleteFromImageKit} from "../utils/deleteFromImageKit.js";
+import {uploadToSupabase} from "../utils/SupaBase.js";
+import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import mongoose, {Mongoose, Schema} from "mongoose";
 import {Playlist} from "../models/playlist.model.js";
 
@@ -32,16 +32,16 @@ const registerUser = asyncHandler(async (req, res) => {
 
   if (req.files?.avatar?.[0]?.path) {
     const avatarLocalPath = req.files.avatar[0].path;
-    avatar = await uploadOnImageKit(avatarLocalPath);
+    avatar = await uploadToSupabase(avatarLocalPath);
 
     if (!avatar) {
-      throw new ApiError(400, "Failed to upload avatar to ImageKit");
+      throw new ApiError(400, "Failed to upload avatar to Supabase");
     }
   }
 
   if (req.files?.coverImage?.[0]?.path) {
     const coverImageLocalPath = req.files.coverImage[0].path;
-    coverImage = await uploadOnImageKit(coverImageLocalPath);
+    coverImage = await uploadToSupabase(coverImageLocalPath);
 
     if (!coverImage) {
       throw new ApiError(400, "Failed to upload cover image to Image Kit");
@@ -292,10 +292,10 @@ const updateAvatar = asyncHandler(async (req, res) => {
   if (!avatarLocalPath) {
     throw new ApiError(400, "Missing avatar file");
   }
-  const avatar = await uploadOnImageKit(avatarLocalPath);
+  const avatar = await uploadToSupabase(avatarLocalPath);
 
   if (!avatar.url) {
-    throw new ApiError(400, "Error while uploading avatar on ImageKit");
+    throw new ApiError(400, "Error while uploading avatar on Supabase");
   }
 
   const user = await User.findByIdAndUpdate(
@@ -308,7 +308,7 @@ const updateAvatar = asyncHandler(async (req, res) => {
     {new: true}
   ).select("-password");
 
-  deleteFromImageKit(oldFilePath);
+  deleteFromSupabase(oldFilePath);
 
   return res
     .status(200)
@@ -322,10 +322,10 @@ const updateCoverImage = asyncHandler(async (req, res) => {
   if (!coverImageLocalPath) {
     throw new ApiError(400, "Missing Cover image file");
   }
-  const coverImage = await uploadOnImageKit(coverImageLocalPath);
+  const coverImage = await uploadToSupabase(coverImageLocalPath);
 
   if (!coverImage.url) {
-    throw new ApiError(400, "Error while uploading avatar on ImageKit");
+    throw new ApiError(400, "Error while uploading avatar on Supabase");
   }
 
   const user = await User.findByIdAndUpdate(
@@ -338,7 +338,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     {new: true}
   ).select("-password");
 
-  deleteFromImageKit(oldFilePath);
+  deleteFromSupabase(oldFilePath);
 
   return res
     .status(200)
