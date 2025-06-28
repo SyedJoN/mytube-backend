@@ -8,6 +8,8 @@ import {ApiResponse} from "../utils/apiResponse.js";
 import {uploadToSupabase} from "../utils/SupaBase.js";
 import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
+import fs from "fs/promises"; // <--- ADD THIS LINE
+import {generateThumbnailsAndVTT} from "../utils/vttMap.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   // sari queries extract kro userId k sath
@@ -153,14 +155,27 @@ const publishVideo = asyncHandler(async (req, res) => {
   if (!videoLocalPath) {
     throw new ApiError(400, "Video file is required!");
   }
-  const {duration, thumbnailPath, dominantColorHex, darkHoverColorHex, lightTextColorHex} =
-    await extractMetadataAndThumbnail(videoLocalPath);
-    
+
+  // const spriteData = await generateThumbnailsAndVTT(videoLocalPath, {
+  //   thumbnailCount: 100,
+  //   columns: 10,
+  //   width: 160,
+  //   height: 90
+  // });
+  const {
+    duration,
+    thumbnailPath,
+    previewPath,
+    activeColor,
+    primaryColor,
+    secondaryColor,
+  } = await extractMetadataAndThumbnail(videoLocalPath);
   const uploadedVideo = await uploadToSupabase(videoLocalPath, "videos");
 
   if (!uploadedVideo) {
     throw new ApiError(400, "Something went wrong while uploading on Supabase");
   }
+  const uploadedPreview = await uploadToSupabase(previewPath, "thumbnails");
 
   const uploadedThumbnail = await uploadToSupabase(thumbnailPath, "thumbnails");
 
@@ -172,10 +187,15 @@ const publishVideo = asyncHandler(async (req, res) => {
     thumbnail: {
       url: uploadedThumbnail.url || "",
       fileId: uploadedThumbnail.fileId,
-      dominantColor: dominantColorHex,
-      darkHoverColor: darkHoverColorHex,
-      lightTextColor: lightTextColorHex
+      preview: uploadedPreview.url,
+      activeColor: activeColor,
+      primaryColor: primaryColor,
+      secondaryColor: secondaryColor,
     },
+    // sprite: {
+    //   url: spriteData.spirtePath,
+    //   vtt: spriteData.vttPath
+    // },
     owner: req.user?._id,
     title,
     description,

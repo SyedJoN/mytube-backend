@@ -9,11 +9,16 @@ const videoSchema = new Schema(
       fileId: {type: String, required: true},
     },
     thumbnail: {
-      url: {type: String, required: true}, 
+      url: {type: String, required: true},
       fileId: {type: String, required: true},
-      dominantColor: {type: String},
-      darkHoverColor: {type: String},
-      lightTextColor: {type: String},
+      preview: {type: String, required: true},
+      activeColor: {type: String},
+      primaryColor: {type: String},
+      secondaryColor: {type: String},
+    },
+    sprite: {
+      url: {type: String}, 
+      vtt: {type: String}, 
     },
     title: {
       type: String,
