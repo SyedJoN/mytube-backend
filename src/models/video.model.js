@@ -17,8 +17,8 @@ const videoSchema = new Schema(
       secondaryColor: {type: String},
     },
     sprite: {
-      url: {type: String}, 
-      vtt: {type: String}, 
+      url: {type: String, required: true}, 
+      vtt: {type: String, required: true}, 
     },
     title: {
       type: String,

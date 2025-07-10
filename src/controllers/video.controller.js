@@ -8,8 +8,9 @@ import {ApiResponse} from "../utils/apiResponse.js";
 import {uploadToSupabase} from "../utils/SupaBase.js";
 import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
-import fs from "fs/promises"; // <--- ADD THIS LINE
+import * as fs from "fs";
 import {generateThumbnailsAndVTT} from "../utils/vttMap.js";
+import path from "path";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   // sari queries extract kro userId k sath
@@ -132,36 +133,32 @@ const getAllVideos = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, video, "All videos fetched successfully"));
 });
 
+
 const publishVideo = asyncHandler(async (req, res) => {
-  const {title, description} = req.body;
+  const { title, description } = req.body;
+
 
   if (!title || !description) {
-    throw new ApiError(400, "All fields are required!");
+    throw new ApiError(400, "Title and description are required.");
   }
 
-  const existingVideo = await Video.findOne({
-    $or: [{title}],
+  const existingVideo = await Video.findOne({ title });
+  if (existingVideo) {
+    throw new ApiError(400, "Video with the same title already exists.");
+  }
+
+  const videoLocalPath = req.file?.path;
+  if (!videoLocalPath) {
+    throw new ApiError(400, "Video file is required.");
+  }
+
+
+  const { spritePath, vttPath } = await generateThumbnailsAndVTT(videoLocalPath, {
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseBucket: "video-sprites",
   });
 
-  if (existingVideo) {
-    throw new ApiError(400, "Video with the same title already exists!");
-  }
-
-  let videoLocalPath;
-  if (req.file) {
-    videoLocalPath = req.file.path;
-  }
-
-  if (!videoLocalPath) {
-    throw new ApiError(400, "Video file is required!");
-  }
-
-  // const spriteData = await generateThumbnailsAndVTT(videoLocalPath, {
-  //   thumbnailCount: 100,
-  //   columns: 10,
-  //   width: 160,
-  //   height: 90
-  // });
+ 
   const {
     duration,
     thumbnailPath,
@@ -170,43 +167,71 @@ const publishVideo = asyncHandler(async (req, res) => {
     primaryColor,
     secondaryColor,
   } = await extractMetadataAndThumbnail(videoLocalPath);
-  const uploadedVideo = await uploadToSupabase(videoLocalPath, "videos");
 
-  if (!uploadedVideo) {
-    throw new ApiError(400, "Something went wrong while uploading on Supabase");
+
+  const safeUpload = async (filePath, bucket) => {
+    try {
+      const result = await uploadToSupabase(filePath, bucket);
+      if (!result) throw new Error("Upload returned null.");
+      return result;
+    } catch (err) {
+      console.error(`❌ Upload failed [${bucket}] →`, filePath);
+      console.error("Reason:", err.message);
+      return null;
+    }
+  };
+
+  const uploadedVideo     = await safeUpload(videoLocalPath, "videos");
+  const uploadedPreview   = await safeUpload(previewPath, "thumbnails");
+  const uploadedThumbnail = await safeUpload(thumbnailPath, "thumbnails");
+  const uploadedSprite    = await safeUpload(spritePath, "video-sprites");
+  const uploadedVtt       = await safeUpload(vttPath, "video-sprites");
+
+  if (!uploadedVideo || !uploadedSprite || !uploadedVtt) {
+    throw new ApiError(500, "One or more uploads to Supabase failed.");
   }
-  const uploadedPreview = await uploadToSupabase(previewPath, "thumbnails");
 
-  const uploadedThumbnail = await uploadToSupabase(thumbnailPath, "thumbnails");
 
-  const video = await Video.create({
+  const newVideo = await Video.create({
     videoFile: {
       url: uploadedVideo.url,
       fileId: uploadedVideo.fileId,
     },
     thumbnail: {
-      url: uploadedThumbnail.url || "",
-      fileId: uploadedThumbnail.fileId,
-      preview: uploadedPreview.url,
-      activeColor: activeColor,
-      primaryColor: primaryColor,
-      secondaryColor: secondaryColor,
+      url: uploadedThumbnail?.url ?? "",
+      fileId: uploadedThumbnail?.fileId ?? "",
+      preview: uploadedPreview?.url ?? "",
+      activeColor,
+      primaryColor,
+      secondaryColor,
     },
-    // sprite: {
-    //   url: spriteData.spirtePath,
-    //   vtt: spriteData.vttPath
-    // },
-    owner: req.user?._id,
+    sprite: {
+      url: uploadedSprite.url,
+      vtt: uploadedVtt.url,
+    },
+    owner: req.user._id,
     title,
     description,
     duration: duration || 0,
     isPublished: true,
   });
 
+
+  const localPaths = [videoLocalPath, previewPath, thumbnailPath, spritePath, vttPath];
+  for (const file of localPaths) {
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch (err) {
+      console.warn(`⚠️ Failed to delete temp file: ${file}`, err.message);
+    }
+  }
+
+
   return res
     .status(200)
-    .json(new ApiResponse(200, video, "Video uploaded successfully!"));
+    .json(new ApiResponse(200, newVideo, "Video uploaded successfully."));
 });
+
 
 const getVideoById = asyncHandler(async (req, res) => {
   const {videoId} = req.params;

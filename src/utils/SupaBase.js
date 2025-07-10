@@ -1,12 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
-
+import mime from "mime-types";
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,             
-  process.env.SUPABASE_SERVICE_ROLE_KEY  
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 export const uploadToSupabase = async (localFilePath, bucketName = "videos") => {
@@ -17,25 +17,37 @@ export const uploadToSupabase = async (localFilePath, bucketName = "videos") => 
     const fileExt = path.extname(localFilePath);
     const fileName = `${uuidv4()}${fileExt}`;
 
-    const { data, error } = await supabase.storage
+    const contentType = mime.lookup(fileExt) || "application/octet-stream";
+
+    const { data, error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(fileName, fileBuffer, {
-        contentType: fileExt === ".mp4" ? "video/mp4" : "image/png",
+        contentType,
         upsert: false,
       });
 
-    if (error) throw error;
+    if (uploadError) throw new Error(uploadError.message);
 
-    const { data: publicUrl } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    const { data: publicData, error: urlError } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(fileName);
 
+    if (urlError || !publicData?.publicUrl) {
+      throw new Error("Failed to get public URL");
+    }
+
+  
     fs.unlinkSync(localFilePath);
 
     return {
-      url: publicUrl.publicUrl,
-      fileId: data.path,
+      url: publicData.publicUrl, 
+      fileId: data.path,         
     };
   } catch (err) {
     console.error("Upload Error:", err.message);
+    try {
+      fs.unlinkSync(localFilePath); 
+    } catch (_) {}
     return null;
   }
 };

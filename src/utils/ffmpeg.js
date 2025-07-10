@@ -45,10 +45,6 @@ export const extractMetadataAndThumbnail = (videoPath) => {
             .noAudio()
             .output(previewPath)
             .on("end", async () => {
-              let dominantColorHex = "#333333";
-              let darkHoverColorHex = "#222222";
-              let lightTextColorHex = "#FFFFFF";
-
               try {
                 const palette = await Vibrant.from(thumbnailPath).getPalette();
                 const swatch =
@@ -61,28 +57,39 @@ export const extractMetadataAndThumbnail = (videoPath) => {
 
                 if (swatch && swatch._rgb?.length === 3) {
                   const [r, g, b] = swatch._rgb;
-                  const baseColor = Color.rgb(r, g, b); 
+                  const baseColor = Color.rgb(r, g, b);
                   const white = Color.rgb(255, 255, 255);
-                  const activeColor = baseColor.darken(0.2).rgb().array(); 
-                  const primaryColor = white.mix(baseColor, 0.4).rgb().array();
+                  const activeColor = baseColor.darken(0.2).rgb().array();
+                  const primaryColor = white.mix(baseColor, 0.2).rgb().array();
                   const secondaryColor = white
-                    .mix(baseColor, 0.6)
+                    .mix(baseColor, 0.5)
                     .rgb()
-                    .array(); // 95% white
+                    .array();
+
+                  const toRgbString = (arr) =>
+                    `rgb(${arr.map(Math.round).join(",")})`;
+
                   resolve({
                     duration,
                     thumbnailPath,
                     previewPath,
-                    activeColor,
-                    primaryColor,
-                    secondaryColor,
+                    activeColor: toRgbString(activeColor),
+                    primaryColor: toRgbString(primaryColor),
+                    secondaryColor: toRgbString(secondaryColor),
                   });
+        
                 }
               } catch (colorError) {
                 console.warn("Color extraction failed:", colorError);
+                     await fs.promises.unlink(thumbnailPath).catch(console.warn);
+                  await fs.promises.unlink(previewPath).catch(console.warn);
               }
             })
-            .on("error", reject)
+            .on("error", (err) => {
+              fs.unlink(thumbnailPath, () => {});
+              fs.unlink(previewPath, () => {});
+              reject(err);
+            })
             .run();
         });
       })

@@ -1,70 +1,75 @@
+
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { exec } from "child_process";
+import { uploadToSupabase } from "./SupaBase.js";
 
 ffmpeg.setFfmpegPath("C:\\ffmpeg\\bin\\ffmpeg.exe");
 ffmpeg.setFfprobePath("C:\\ffmpeg\\bin\\ffprobe.exe");
 
-export const generateThumbnailsAndVTT = (videoPath, options = {}) => {
+export const generateThumbnailsAndVTT = async (videoPath, options = {}) => {
   const tempDir = path.resolve(process.cwd(), "public", "temp");
   const spriteName = `${uuidv4()}-sprite.jpg`;
   const vttName = `${uuidv4()}.vtt`;
+
   const spritePath = path.join(tempDir, spriteName);
   const vttPath = path.join(tempDir, vttName);
 
-  const thumbnailCount = options.thumbnailCount || 100;
-  const columns = options.columns || 10;
-  const width = options.width || 160;
-  const height = options.height || 90;
+  const thumbnailCount = options.thumbnailCount ?? 100;
+  const columns = options.columns ?? 10;
+  const width = options.width ?? 240;
+  const height = options.height ?? 135;
+
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
-    ffmpeg(videoPath)
-      .on("end", () => {
-        // Combine thumbnails into sprite
-        const tileOutput = path.join(tempDir, "thumb%03d.jpg");
+    ffmpeg.ffprobe(videoPath, (err, metadata) => {
+      if (err) return reject(err);
+      const duration = metadata.format.duration;
+      const fps = thumbnailCount / duration;
+      const rows = Math.ceil(thumbnailCount / columns);
 
-        // ✅ Wrap paths in quotes to prevent issues with spaces
-        const montageCmd = `magick montage "${tileOutput}" -tile ${columns}x -geometry ${width}x${height}+0+0 "${spritePath}"`;
+      const vf = `fps=${fps},scale=${width}:${height},tile=${columns}x${rows}`;
 
-        exec(montageCmd, (err, stdout, stderr) => {
-          if (err) {
-            console.error("Montage Error:", err);
-            return reject(new Error(`Montage failed: ${stderr}`));
-          }
+      ffmpeg(videoPath)
+        .outputOptions(["-vf", vf, "-frames:v", "1"])
+        .on("end", async () => {
+        
+          const uploadedSprite = await uploadToSupabase(spritePath, "video-sprites");
+          if (!uploadedSprite?.url) return reject("Sprite upload failed");
 
-          // Generate VTT file
+          const spriteUrl = uploadedSprite.url;
+
+      
+          const formatTime = (s) => new Date(s * 1000).toISOString().substring(11, 23);
           let vtt = "WEBVTT\n\n";
+          const step = duration / thumbnailCount;
+
           for (let i = 0; i < thumbnailCount; i++) {
-            const start = i;
-            const end = i + 1;
+            const start = i * step;
+            const end = (i + 1) * step;
             const row = Math.floor(i / columns);
             const col = i % columns;
             const x = col * width;
             const y = row * height;
 
-            const formatTime = (seconds) =>
-              new Date(seconds * 1000).toISOString().substr(11, 8) + ".000";
-
-            vtt += `${formatTime(start)} --> ${formatTime(end)}\n`;
-            vtt += `${spriteName}#xywh=${x},${y},${width},${height}\n\n`;
+            vtt += `${formatTime(start)} --> ${formatTime(end)} align:start line:0%\n`;
+            vtt += `${spriteUrl}#xywh=${x},${y},${width},${height}\n\n`;
           }
 
           fs.writeFileSync(vttPath, vtt);
+
           resolve({
-            spritePath,
-            vttPath,
-            totalThumbnails: thumbnailCount,
+            spritePath: spritePath,
+            vttPath: vttPath,
+            publicSpriteUrl: spriteUrl,
           });
-        });
-      })
-      .on("error", reject)
-      .screenshots({
-        count: thumbnailCount,
-        folder: tempDir,
-        size: `${width}x${height}`,
-        filename: "thumb%03d.jpg",
-      });
+        })
+        .on("error", reject)
+        .save(spritePath);
+    });
   });
 };
+
+
