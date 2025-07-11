@@ -59,11 +59,13 @@ export const generateThumbnailsAndVTT = async (videoPath, options = {}) => {
           }
 
           fs.writeFileSync(vttPath, vtt);
+          const uploadedVtt = await uploadToSupabase(vttPath, "video-sprites");
+          if (!uploadedVtt?.url) return reject("VTT upload failed");
+          const vttUrl = uploadedVtt.url;
 
           resolve({
-            spritePath: spritePath,
-            vttPath: vttPath,
-            publicSpriteUrl: spriteUrl,
+            spritePath: spriteUrl,
+            vttPath: vttUrl,
           });
         })
         .on("error", reject)

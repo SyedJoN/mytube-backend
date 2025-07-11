@@ -175,7 +175,7 @@ const publishVideo = asyncHandler(async (req, res) => {
       if (!result) throw new Error("Upload returned null.");
       return result;
     } catch (err) {
-      console.error(`❌ Upload failed [${bucket}] →`, filePath);
+      console.error(`Upload failed [${bucket}] →`, filePath);
       console.error("Reason:", err.message);
       return null;
     }
@@ -184,13 +184,10 @@ const publishVideo = asyncHandler(async (req, res) => {
   const uploadedVideo     = await safeUpload(videoLocalPath, "videos");
   const uploadedPreview   = await safeUpload(previewPath, "thumbnails");
   const uploadedThumbnail = await safeUpload(thumbnailPath, "thumbnails");
-  const uploadedSprite    = await safeUpload(spritePath, "video-sprites");
-  const uploadedVtt       = await safeUpload(vttPath, "video-sprites");
 
-  if (!uploadedVideo || !uploadedSprite || !uploadedVtt) {
+  if (!uploadedVideo || !uploadedPreview || !uploadedThumbnail) {
     throw new ApiError(500, "One or more uploads to Supabase failed.");
   }
-
 
   const newVideo = await Video.create({
     videoFile: {
@@ -206,8 +203,8 @@ const publishVideo = asyncHandler(async (req, res) => {
       secondaryColor,
     },
     sprite: {
-      url: uploadedSprite.url,
-      vtt: uploadedVtt.url,
+      url: spritePath,
+      vtt: vttPath,
     },
     owner: req.user._id,
     title,
@@ -222,7 +219,7 @@ const publishVideo = asyncHandler(async (req, res) => {
     try {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     } catch (err) {
-      console.warn(`⚠️ Failed to delete temp file: ${file}`, err.message);
+      console.warn(`Failed to delete temp file: ${file}`, err.message);
     }
   }
 
