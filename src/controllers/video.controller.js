@@ -109,6 +109,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
       title: 1,
       description: 1,
       thumbnail: 1,
+      sprite: 1,
+      videoFile: 1,
       views: 1,
       duration: 1,
       owner: 1,
