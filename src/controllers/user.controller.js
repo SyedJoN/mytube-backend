@@ -592,7 +592,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
         $push: {
           watchHistory: {
             video: videoId,
-            duration: duration || 0,
+            duration: typeof duration === "number" ? duration : 0,
             lastWatchedAt: new Date(),
           },
         },
