@@ -54,7 +54,7 @@ app.use("/api/v1/dislikes", dislikeRouter);
 app.use("/api/v1/comments", commentRouter);
 app.use("/api/v1/telemetry", telemetryRouter);
 
-app.use((err, req, res, next) => {
+app.use((err, res) => {
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || "Internal Server Error",

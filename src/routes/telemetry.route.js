@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { createTelemetry } from "../controllers/telemetry.controller.js";
+import { createTelemetryBatch } from "../controllers/telemetry.controller.js";
+import { optionalJWT } from "../middlewares/optionalJWT.js";
+
 
 
 const router = Router();
 
-router.route("/telemetry").post(createTelemetry);
+router.route("/stats").post(optionalJWT, createTelemetryBatch);
 
 
 export default router

@@ -14,7 +14,7 @@ const telemetrySchema = new Schema({
   fullscreen: Boolean,
   autoplay: Boolean,
   lact: Number,
-  timestamp: {type: Date, default: Date.now, index: {expires: "30d"}},
+  timestamp: {type: Date, default: Date.now, index: {expires: "10d"}},
 }, {timestamps: true});
 
 export const Telemetry = mongoose.model("WatchTelemetry", telemetrySchema);

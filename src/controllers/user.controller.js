@@ -8,6 +8,7 @@ import {uploadToSupabase} from "../utils/SupaBase.js";
 import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import mongoose, {Mongoose, Schema} from "mongoose";
 import {Playlist} from "../models/playlist.model.js";
+import { Telemetry } from "../models/telemetry.model.js";
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -139,7 +140,7 @@ const loginUser = asyncHandler(async (req, res) => {
         {
           user: loggedInUser,
           accessToken,
-          refreshToken, // also sending tokens in response as front end engr wants to store it in localstorage or if its a mobile application i.e sending details in header
+          refreshToken,  
         },
         "User logged in successfully!"
       )
@@ -487,21 +488,29 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
 });
 
 const getWatchHistory = asyncHandler(async (req, res) => {
-  const user = await User.aggregate([
+  const userId = req.user._id;
+
+  const watchHistory = await Telemetry.aggregate([
     {
       $match: {
-        _id: new mongoose.Types.ObjectId(req.user?._id),
+        userId: new mongoose.Types.ObjectId(userId),
+        currentTime: { $gte: 10 },
       },
     },
+    { $sort: { timestamp: -1 } },
     {
-      $unwind: "$watchHistory",
+      $group: {
+        _id: "$video", 
+        lastWatchedAt: { $first: "$timestamp" },
+        resumeTime: { $first: "$currentTime" },
+      },
     },
     {
       $lookup: {
         from: "videos",
-        localField: "watchHistory.video",
+        localField: "_id",
         foreignField: "_id",
-        as: "videoDetails",
+        as: "video",
         pipeline: [
           {
             $lookup: {
@@ -510,104 +519,102 @@ const getWatchHistory = asyncHandler(async (req, res) => {
               foreignField: "_id",
               as: "owner",
               pipeline: [
-                {
-                  $project: {
-                    username: 1,
-                    avatar: 1,
-                    fullName: 1,
-                  },
-                },
+                { $project: { username: 1, avatar: 1, fullName: 1 } },
               ],
             },
           },
-          {
-            $addFields: {
-              owner: {$first: "$owner"},
-            },
-          },
+          { $addFields: { owner: { $first: "$owner" } } },
         ],
       },
     },
-    {
-      $addFields: {
-        video: {$first: "$videoDetails"},
-        duration: "$videoDetails.duration",
-        lastWatchedAt: "$videoDetails.lastWatchedAt",
-      },
-    },
+    { $addFields: { video: { $first: "$video" } } },
     {
       $project: {
         video: 1,
-        duration: 1,
+        duration: "$resumeTime",
         lastWatchedAt: 1,
       },
     },
-    {
-      $sort: {
-        lastWatchedAt: -1,
-      },
-    },
+    { $sort: { lastWatchedAt: -1 } },
   ]);
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, user, "Watch history fetched successfully!"));
+  return res.status(200).json(
+    new ApiResponse(200, watchHistory, "Watch history fetched successfully!")
+  );
 });
+
+
+
+
 
 const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
-  const {videoId, duration} = req.body;
+  const { videoId } = req.body;
 
-
-  if (!userId) {
-    throw new ApiError(400, "User Id is required!");
-  }
-  if (!videoId) {
-    throw new ApiError(400, "Video Id is required!");
-  }
+  if (!userId) throw new ApiError(400, "User Id is required!");
+  if (!videoId) throw new ApiError(400, "Video Id is required!");
   if (!mongoose.Types.ObjectId.isValid(videoId)) {
     throw new ApiError(400, "Invalid Video Id format!");
   }
 
-  // update if video already exists.
 
-  const user = await User.findOneAndUpdate(
+  const latestTelemetry = await Telemetry.findOne({
+    user: userId,
+    video: videoId,
+    currentTime: { $exists: true },
+  })
+    .sort({ timestamp: -1 })     .select("currentTime timestamp");
+
+ 
+  if (!latestTelemetry) {
+    return res.status(400).json(
+      new ApiResponse(400, null, "No telemetry found for this video.")
+    );
+  }
+
+  const resumeTime = latestTelemetry.currentTime || 0;
+
+  const watchEntry = {
+    duration: resumeTime,
+    lastWatchedAt: new Date(),
+  };
+
+  
+  const updatedUser = await User.findOneAndUpdate(
     {
       _id: userId,
       "watchHistory.video": videoId,
     },
     {
       $set: {
-        "watchHistory.$.duration": duration,
-        "watchHistory.$.lastWatchedAt": new Date(),
+        "watchHistory.$.duration": watchEntry.duration,
+        "watchHistory.$.lastWatchedAt": watchEntry.lastWatchedAt,
       },
     },
-    {new: true}
+    { new: true }
   );
-  // if video dosent exist, push a new entry.
-  if (!user) {
+
+  
+  if (!updatedUser) {
     await User.findByIdAndUpdate(
       userId,
       {
         $push: {
           watchHistory: {
             video: videoId,
-            duration: typeof duration === "number" ? duration : 0,
-            lastWatchedAt: new Date(),
+            ...watchEntry,
           },
         },
       },
-      {new: true}
+      { new: true }
     );
-    return res
-      .status(200)
-      .json(new ApiResponse(200, "Watch history updated successfully!"));
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, "User's watch history added successfully!"));
+    .json(new ApiResponse(200, null, "Watch history synced with telemetry!"));
 });
+
 
 export {
   registerUser,
