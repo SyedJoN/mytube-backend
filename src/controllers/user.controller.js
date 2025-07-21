@@ -140,7 +140,7 @@ const loginUser = asyncHandler(async (req, res) => {
         {
           user: loggedInUser,
           accessToken,
-          refreshToken,  
+          refreshToken, // also sending tokens in response as front end engr wants to store it in localstorage or if its a mobile application i.e sending details in header
         },
         "User logged in successfully!"
       )
@@ -487,65 +487,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, channel, "User details fetched successfully!"));
 });
 
-const getWatchHistory = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-
-  const watchHistory = await Telemetry.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        currentTime: { $gte: 10 },
-      },
-    },
-    { $sort: { timestamp: -1 } },
-    {
-      $group: {
-        _id: "$video", 
-        lastWatchedAt: { $first: "$timestamp" },
-        resumeTime: { $first: "$currentTime" },
-      },
-    },
-    {
-      $lookup: {
-        from: "videos",
-        localField: "_id",
-        foreignField: "_id",
-        as: "video",
-        pipeline: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "owner",
-              foreignField: "_id",
-              as: "owner",
-              pipeline: [
-                { $project: { username: 1, avatar: 1, fullName: 1 } },
-              ],
-            },
-          },
-          { $addFields: { owner: { $first: "$owner" } } },
-        ],
-      },
-    },
-    { $addFields: { video: { $first: "$video" } } },
-    {
-      $project: {
-        video: 1,
-        duration: "$resumeTime",
-        lastWatchedAt: 1,
-      },
-    },
-    { $sort: { lastWatchedAt: -1 } },
-  ]);
-
-  return res.status(200).json(
-    new ApiResponse(200, watchHistory, "Watch history fetched successfully!")
-  );
-});
-
-
-
-
 
 const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
@@ -557,15 +498,16 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid Video Id format!");
   }
 
-
+  // 📥 Telemetry se latest resume time nikal lo
   const latestTelemetry = await Telemetry.findOne({
     user: userId,
     video: videoId,
     currentTime: { $exists: true },
   })
-    .sort({ timestamp: -1 })     .select("currentTime timestamp");
+    .sort({ timestamp: -1 }) // latest record
+    .select("currentTime timestamp");
 
- 
+  // ⛔ Agar telemetry hi nahi mili
   if (!latestTelemetry) {
     return res.status(400).json(
       new ApiResponse(400, null, "No telemetry found for this video.")
@@ -579,7 +521,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
     lastWatchedAt: new Date(),
   };
 
-  
+  // 🔁 Update agar already video history mein hai
   const updatedUser = await User.findOneAndUpdate(
     {
       _id: userId,
@@ -594,7 +536,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  
+  // ➕ Naya add karo agar nahi tha
   if (!updatedUser) {
     await User.findByIdAndUpdate(
       userId,
@@ -627,6 +569,5 @@ export {
   updateAvatar,
   updateCoverImage,
   getUserChannelProfile,
-  getWatchHistory,
   addOrUpdateWatchHistory,
 };

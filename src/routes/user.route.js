@@ -5,7 +5,6 @@ import {
   changeCurrentPassword,
   getCurrentUser,
   getUserChannelProfile,
-  getWatchHistory,
   loginUser,
   logoutUser,
   refreshAccessToken,
@@ -16,6 +15,7 @@ import {
 } from "../controllers/user.controller.js";
 import {upload} from "../middlewares/multer.middleware.js";
 import {verifyJWT} from "../middlewares/auth.middleware.js";
+import { getWatchHistory } from "../controllers/watchHistory.controller.js";
 
 const router = Router();
 
@@ -47,6 +47,5 @@ router
   .patch(verifyJWT, upload.single("coverImage"), updateCoverImage);
 router.route("/channel/:username").get(optionalJWT, getUserChannelProfile);
 router.route("/history").get(verifyJWT, getWatchHistory);
-router.route("/history").post(verifyJWT, addOrUpdateWatchHistory)
 
 export default router;
