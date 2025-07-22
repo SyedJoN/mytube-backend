@@ -9,7 +9,7 @@ export const getWatchHistory = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
-  const history = await WatchHistory.find({ userId, currentTime: { $gte: 10} })
+  const history = await WatchHistory.find({ userId })
     .sort({ lastUpdated: -1 })
     .populate({
       path: "video",

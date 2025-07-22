@@ -1,17 +1,16 @@
-import {Telemetry} from "../models/telemetry.model.js";
-import {WatchHistory} from "../models/watchHistory.model.js";
-import {ApiError} from "../utils/ApiError.js";
-import {ApiResponse} from "../utils/apiResponse.js";
-import {asyncHandler} from "../utils/asyncHandler.js";
-import mongoose from "mongoose";
+import { Telemetry } from "../models/telemetry.model.js";
+import { WatchHistory } from "../models/watchHistory.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/apiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const createTelemetryBatch = asyncHandler(async (req, res) => {
-  const {telemetryData} = req.body;
+  const { telemetryData } = req.body;
   if (!Array.isArray(telemetryData) || telemetryData.length === 0) {
     throw new ApiError(400, "No telemetry data provided");
   }
 
-  // Prepare telemetry docs for insertion
+  
   const docs = telemetryData.map((entry) => ({
     video: entry.videoId,
     duration: entry.duration,
@@ -24,60 +23,74 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     anonId: entry.anonId,
     userId: entry.userId || null,
     lact: entry.lact,
+    final: entry.final || 0, 
     timestamp: new Date(entry.timestamp) || new Date(),
   }));
 
-  // Handle Watch History update (only if userId exists)
+  const operations = [];
+
   for (const telemetry of telemetryData) {
-    const {videoId, userId, currentTime, duration} = telemetry;
+    const { videoId, userId, currentTime, duration, final } = telemetry;
 
-    // Skip anonymous or too early watch time
-    if (!userId || Math.ceil(currentTime).toFixed(0) < 10) continue;
+    
+    if (!userId) {
+      console.log("Skipping telemetry: no userId");
+      continue;
+    }
 
-    const last = await WatchHistory.findOne({video: videoId, userId});
+    let updatedCurrentTime = currentTime;
 
-    if (!last) {
-      // Insert if doesn't exist
-      await WatchHistory.updateOne(
-        {video: videoId, userId},
-        {
-          $set: {
-            currentTime,
-            duration,
-            lastUpdated: new Date(),
-          },
-        },
-        {upsert: true}
-      );
-    } else if (
-      Math.floor(currentTime) - (Math.floor(last.currentTime) || 0) >=
-      10
+    
+    if (Math.abs(currentTime - duration) < 0.5) {
+      console.log("Video ended, resetting currentTime to 0");
+      updatedCurrentTime = 0;
+    }
+
+    const last = await WatchHistory.findOne({ video: videoId, userId });
+
+    
+    if (!last && parseFloat(currentTime.toFixed(0)) < 10 && !final) {
+      console.log("Skipping telemetry: no previous record and currentTime < 10");
+      continue;
+    }
+
+  
+    if (
+      !last ||
+      (final !== 1 && Math.abs(parseFloat(currentTime.toFixed(0)) - (parseFloat(last?.currentTime.toFixed(0)) || 0)) >= 10) ||
+      updatedCurrentTime === 0 ||
+      parseFloat(currentTime.toFixed(0)) < (parseFloat(last?.currentTime.toFixed(0)) || 0) ||
+      final === 1
     ) {
-      // Update only if 10s progress since last update
-      await WatchHistory.updateOne(
-        {video: videoId, userId},
-        {
-          $set: {
-            currentTime,
-            duration,
-            lastUpdated: new Date(),
+      console.log("Updating WatchHistory:", { videoId, userId, updatedCurrentTime, final });
+      operations.push({
+        updateOne: {
+          filter: { video: videoId, userId },
+          update: {
+            $set: {
+              currentTime: updatedCurrentTime,
+              duration,
+              lastUpdated: new Date(),
+            },
           },
+          upsert: true,
         },
-        {upsert: true}
-      );
+      });
     }
   }
 
-  // Insert telemetry logs
-  try {
-    const telemetry = await Telemetry.insertMany(docs, {ordered: false});
+  if (operations.length > 0) {
+    await WatchHistory.bulkWrite(operations, { ordered: false });
+  }
 
+  try {
+    const telemetry = await Telemetry.insertMany(docs, { ordered: false });
     return res
       .status(201)
       .json(
         new ApiResponse(
           201,
-          {insertedCount: telemetry.length},
+          { insertedCount: telemetry.length },
           "Telemetry batch created successfully!"
         )
       );
