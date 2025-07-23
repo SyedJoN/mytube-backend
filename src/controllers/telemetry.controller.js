@@ -1,8 +1,10 @@
-import { Telemetry } from "../models/telemetry.model.js";
-import { WatchHistory } from "../models/watchHistory.model.js";
-import { ApiError } from "../utils/ApiError.js";
-import { ApiResponse } from "../utils/apiResponse.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import {Telemetry} from "../models/telemetry.model.js";
+import {WatchHistory} from "../models/watchHistory.model.js";
+import {ApiError} from "../utils/ApiError.js";
+import {ApiResponse} from "../utils/apiResponse.js";
+import {asyncHandler} from "../utils/asyncHandler.js";
+
+const controlsSeekMap = new Map();
 
 export const createTelemetryBatch = asyncHandler(async (req, res) => {
   const { telemetryData } = req.body;
@@ -10,96 +12,81 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No telemetry data provided");
   }
 
-  
-  const docs = telemetryData.map((entry) => ({
-    video: entry.videoId,
-    duration: entry.duration,
-    currentTime: entry.currentTime,
-    state: entry.state,
-    muted: entry.muted,
-    fullscreen: entry.fullscreen,
-    autoplay: entry.autoplay,
-    sessionId: entry.sessionId,
-    anonId: entry.anonId,
-    userId: entry.userId || null,
-    lact: entry.lact,
-    final: entry.final || 0, 
-    timestamp: new Date(entry.timestamp) || new Date(),
+  const docs = telemetryData.map((e) => ({
+    video: e.videoId,
+    duration: e.duration,
+    currentTime: e.currentTime,
+    state: e.state,
+    muted: e.muted,
+    fullscreen: e.fullscreen,
+    autoplay: e.autoplay,
+    sessionId: e.sessionId,
+    anonId: e.anonId,
+    userId: e.userId || null,
+    lact: e.lact,
+    source: e.source,
+    final: e.final || 0,
+    seeked: e.seeked || 0,
+    timestamp: new Date(e.timestamp) || new Date(),
   }));
 
   const operations = [];
 
-  for (const telemetry of telemetryData) {
-    const { videoId, userId, currentTime, duration, final } = telemetry;
+  for (const tel of telemetryData) {
+    const { videoId, userId, currentTime, duration, seeked, source, final } = tel;
+    if (!userId) continue;
 
-    
-    if (!userId) {
-      console.log("Skipping telemetry: no userId");
+    const key = `${userId}-${videoId}`;
+
+    if (source === "controls" && seeked === 1) {
+      controlsSeekMap.set(key, true);
       continue;
     }
 
-    let updatedCurrentTime = currentTime;
+    if (final !== 1) continue;
 
-    
-    if (Math.abs(currentTime - duration) < 0.5) {
-      console.log("Video ended, resetting currentTime to 0");
-      updatedCurrentTime = 0;
-    }
+    const hoverAfterSeek = source === "home" && controlsSeekMap.get(key);
 
-    const last = await WatchHistory.findOne({ video: videoId, userId });
+    let updatedTime = currentTime;
+    if (Math.abs(currentTime - duration) < 0.5) updatedTime = 0;
 
-    
-    if (!last && parseFloat(currentTime.toFixed(0)) < 10 && !final) {
-      console.log("Skipping telemetry: no previous record and currentTime < 10");
-      continue;
-    }
+    const lastRec = await WatchHistory.findOne({ video: videoId, userId });
+    const prev = Math.floor(lastRec?.currentTime || 0);
+    const curr = Math.floor(currentTime);
 
-  
-    if (
-      !last ||
-      (final !== 1 && Math.abs(parseFloat(currentTime.toFixed(0)) - (parseFloat(last?.currentTime.toFixed(0)) || 0)) >= 10) ||
-      updatedCurrentTime === 0 ||
-      parseFloat(currentTime.toFixed(0)) < (parseFloat(last?.currentTime.toFixed(0)) || 0) ||
-      final === 1
-    ) {
-      console.log("Updating WatchHistory:", { videoId, userId, updatedCurrentTime, final });
-      operations.push({
-        updateOne: {
-          filter: { video: videoId, userId },
-          update: {
-            $set: {
-              currentTime: updatedCurrentTime,
-              duration,
-              lastUpdated: new Date(),
-            },
+    const jumpedForward = seeked === 1 && curr > prev;
+    const jumpedBackward = hoverAfterSeek && curr < prev;
+    const largerGap = !seeked && Math.abs(curr - prev) >= 10;
+
+    if (!lastRec && curr < 10 && !hoverAfterSeek) continue;
+
+    const updateNow = hoverAfterSeek || jumpedForward || jumpedBackward || largerGap || updatedTime === 0;
+    if (!updateNow) continue;
+
+    operations.push({
+      updateOne: {
+        filter: { video: videoId, userId },
+        update: {
+          $set: {
+            currentTime: updatedTime,
+            duration,
+            lastUpdated: new Date(),
           },
-          upsert: true,
         },
-      });
-    }
+        upsert: true,
+      },
+    });
+
+    if (hoverAfterSeek) controlsSeekMap.delete(key);
   }
 
   if (operations.length > 0) {
     await WatchHistory.bulkWrite(operations, { ordered: false });
   }
-
   try {
-    const telemetry = await Telemetry.insertMany(docs, { ordered: false });
-    return res
-      .status(201)
-      .json(
-        new ApiResponse(
-          201,
-          { insertedCount: telemetry.length },
-          "Telemetry batch created successfully!"
-        )
-      );
+    await Telemetry.insertMany(docs, { ordered: false });
+    return res.status(201).json(new ApiResponse(201, { insertedCount: docs.length }, "ok"));
   } catch (err) {
-    console.error("❌ Telemetry insert error:", err.message);
-    return res.status(400).json({
-      success: false,
-      message: "Telemetry batch insert failed",
-      error: err.message,
-    });
+    return res.status(400).json({ success: false, error: err.message });
   }
 });

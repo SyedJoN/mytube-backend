@@ -14,6 +14,9 @@ const telemetrySchema = new Schema({
   fullscreen: Boolean,
   autoplay: Boolean,
   lact: Number,
+  final: Number,
+  seeked: Number,
+  source: String,
   timestamp: {type: Date, default: Date.now, index: {expires: "10d"}},
 }, {timestamps: true});
 

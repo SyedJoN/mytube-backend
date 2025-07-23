@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.model.js";
 
-export const optionalJWT = asyncHandler(async (req, res, next) => {
+export const optionalJWT = asyncHandler(async (req, _, next) => {
   const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
 
   if (!token) {
