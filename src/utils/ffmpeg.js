@@ -5,6 +5,7 @@ import path from "path";
 import {v4 as uuidv4} from "uuid";
 import Color from "color";
 import fs from "fs";
+import { getMostFrequentColor } from "./ExtractColor.js";
 
 ffmpeg.setFfmpegPath("C:\\ffmpeg\\bin\\ffmpeg.exe");
 ffmpeg.setFfprobePath("C:\\ffmpeg\\bin\\ffprobe.exe");
@@ -36,7 +37,7 @@ export const extractMetadataAndThumbnail = (videoPath) => {
           if (err) return reject(err);
 
           const duration = metadata.format.duration;
-          const previewStart = Math.min(1, duration / 4); // Start around 1s in
+          const previewStart = Math.min(1, duration / 4); 
 
           ffmpeg(videoPath)
             .setStartTime(previewStart)
@@ -45,46 +46,32 @@ export const extractMetadataAndThumbnail = (videoPath) => {
             .noAudio()
             .output(previewPath)
             .on("end", async () => {
-              try {
-                const palette = await Vibrant.from(thumbnailPath).getPalette();
-                const swatch =
-                  palette.Vibrant ||
-                  palette.DarkVibrant ||
-                  palette.Muted ||
-                  palette.LightVibrant ||
-                  palette.DarkMuted ||
-                  palette.LightMuted;
+  try {
+    const [r, g, b] = await getMostFrequentColor(thumbnailPath);
+    const baseColor = Color.rgb(r, g, b);
+    const white = Color.rgb(255, 255, 255);
 
-                if (swatch && swatch._rgb?.length === 3) {
-                  const [r, g, b] = swatch._rgb;
-                  const baseColor = Color.rgb(r, g, b);
-                  const white = Color.rgb(255, 255, 255);
-                  const activeColor = baseColor.darken(0.2).rgb().array();
-                  const primaryColor = white.mix(baseColor, 0.2).rgb().array();
-                  const secondaryColor = white
-                    .mix(baseColor, 0.5)
-                    .rgb()
-                    .array();
+    const activeColor = baseColor.darken(0.2).rgb().array();
+    const primaryColor = white.mix(baseColor, 0.2).rgb().array();
+    const secondaryColor = white.mix(baseColor, 0.5).rgb().array();
 
-                  const toRgbString = (arr) =>
-                    `rgb(${arr.map(Math.round).join(",")})`;
+    const toRgbString = (arr) =>
+      `rgb(${arr.map(Math.round).join(",")})`;
 
-                  resolve({
-                    duration,
-                    thumbnailPath,
-                    previewPath,
-                    activeColor: toRgbString(activeColor),
-                    primaryColor: toRgbString(primaryColor),
-                    secondaryColor: toRgbString(secondaryColor),
-                  });
-        
-                }
-              } catch (colorError) {
-                console.warn("Color extraction failed:", colorError);
-                     await fs.promises.unlink(thumbnailPath).catch(console.warn);
-                  await fs.promises.unlink(previewPath).catch(console.warn);
-              }
-            })
+    resolve({
+      duration,
+      thumbnailPath,
+      previewPath,
+      activeColor: toRgbString(activeColor),
+      primaryColor: toRgbString(primaryColor),
+      secondaryColor: toRgbString(secondaryColor),
+    });
+  } catch (err) {
+    console.warn("Color extraction failed:", err);
+    await fs.promises.unlink(thumbnailPath).catch(console.warn);
+    await fs.promises.unlink(previewPath).catch(console.warn);
+  }
+})
             .on("error", (err) => {
               fs.unlink(thumbnailPath, () => {});
               fs.unlink(previewPath, () => {});

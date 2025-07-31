@@ -11,6 +11,7 @@ import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
 import * as fs from "fs";
 import {generateThumbnailsAndVTT} from "../utils/vttMap.js";
 import path from "path";
+import { safeUnlink } from "../utils/SafeUnlink.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   // sari queries extract kro userId k sath
@@ -187,9 +188,11 @@ const publishVideo = asyncHandler(async (req, res) => {
   const uploadedPreview   = await safeUpload(previewPath, "thumbnails");
   const uploadedThumbnail = await safeUpload(thumbnailPath, "thumbnails");
 
-  if (!uploadedVideo || !uploadedPreview || !uploadedThumbnail) {
-    throw new ApiError(500, "One or more uploads to Supabase failed.");
-  }
+ if (!uploadedVideo || !uploadedPreview || !uploadedThumbnail) {
+  [uploadedVideo, uploadedPreview, uploadedThumbnail].forEach(safeUnlink);
+  throw new ApiError(500, "One or more uploads to Supabase failed.");
+}
+
 
   const newVideo = await Video.create({
     videoFile: {
@@ -218,11 +221,7 @@ const publishVideo = asyncHandler(async (req, res) => {
 
   const localPaths = [videoLocalPath, previewPath, thumbnailPath, spritePath, vttPath];
   for (const file of localPaths) {
-    try {
-      if (fs.existsSync(file)) fs.unlinkSync(file);
-    } catch (err) {
-      console.warn(`Failed to delete temp file: ${file}`, err.message);
-    }
+  safeUnlink(file)
   }
 
 
