@@ -8,8 +8,8 @@ import {uploadToSupabase} from "../utils/SupaBase.js";
 import {deleteFromSupabase} from "../utils/deleteFromSupabase.js";
 import mongoose, {Mongoose, Schema} from "mongoose";
 import {Playlist} from "../models/playlist.model.js";
-import { Telemetry } from "../models/telemetry.model.js";
-
+import {Telemetry} from "../models/telemetry.model.js";
+import { getCookieOptions } from "../utils/GetCookieOptions.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   const {email, username, password, fullName} = req.body;
@@ -71,7 +71,7 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createdUser, "User registered successfully!"));
 });
 
-const generateAccessAndRefreshToken = async (userId) => {
+export const generateAccessAndRefreshToken = async (userId) => {
   try {
     const user = await User.findOne(userId);
     const accessToken = user.generateAccessToken();
@@ -96,6 +96,10 @@ const loginUser = asyncHandler(async (req, res) => {
   // password check
   // generate access and refresh token
   // send cookie
+
+  const tokenExpiry = 15 * 60 * 1000;
+  const refreshExpiry = 7 * 24 * 60 * 60 * 1000;
+  const loginFlagExpiry = refreshExpiry;
 
   const {username, email, password} = req.body;
 
@@ -124,24 +128,23 @@ const loginUser = asyncHandler(async (req, res) => {
     "-password -refreshToken"
   );
 
-  const options = {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None",
+  const responseData = {
+    user: loggedInUser,
   };
+  if (process.env.CLIENT_TYPE === "mobile") {
+    responseData.accessToken = accessToken;
+    responseData.refreshToken = refreshToken;
+  }
 
   return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, getCookieOptions(true, tokenExpiry))
+    .cookie("refreshToken", refreshToken, getCookieOptions(true, refreshExpiry))
+    .cookie("login_flag", true, getCookieOptions(false, loginFlagExpiry))
     .json(
       new ApiResponse(
         200,
-        {
-          user: loggedInUser,
-          accessToken,
-          refreshToken, // also sending tokens in response as front end engr wants to store it in localstorage or if its a mobile application i.e sending details in header
-        },
+          responseData,
         "User logged in successfully!"
       )
     );
@@ -159,69 +162,66 @@ const logoutUser = asyncHandler(async (req, res) => {
       new: true,
     }
   );
-  const options = {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None",
-  };
-
+ 
   return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", getCookieOptions(true, new Date(0), false))
+    .clearCookie("refreshToken", getCookieOptions(true, new Date(0), false))
+    .clearCookie("login_flag", getCookieOptions(false, new Date(0), false))
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken =
-    req.cookies?.refreshToken || req.body?.refreshToken;
+  const refreshTokenFromCookie = req.cookies?.refreshToken;
 
-  if (!incomingRefreshToken) {
-    throw new ApiError(401, "Invalid authorization");
+  if (!refreshTokenFromCookie) {
+    throw new ApiError(401, "Refresh token missing");
   }
 
   try {
     const decodedToken = jwt.verify(
-      incomingRefreshToken,
+      refreshTokenFromCookie,
       process.env.REFRESH_TOKEN_SECRET
     );
-
     const user = await User.findById(decodedToken?._id);
-
     if (!user) {
-      throw new ApiError(401, "Invalid refresh token");
+      throw new ApiError(400, "Invalid Refresh Token: User not found");
     }
-
-    if (incomingRefreshToken !== user.refreshToken) {
-      throw new ApiError(401, "Refresh token expired or already used");
+    if (user.refreshToken !== refreshTokenFromCookie) {
+      throw new ApiError(401, "Token Mismatch. Possible Token Theft Detected");
     }
+    const {accessToken, refreshToken: newRefreshToken} =
+      await generateAccessAndRefreshToken(user._id);
 
-    const options = {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-    };
+    await User.findByIdAndUpdate(user._id, {
+      refreshToken: newRefreshToken,
+    });
 
-    const {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(
-      user._id
-    );
+    const tokenExpiry = 15 * 60 * 1000;
+    const refreshExpiry = 7 * 24 * 60 * 60 * 1000;
+    const loginFlagExpiry = refreshExpiry;
 
     res
-      .status(201)
-      .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", newRefreshToken, options)
+      .cookie("accessToken", accessToken, getCookieOptions(true, tokenExpiry))
+      .cookie(
+        "refreshToken",
+        newRefreshToken,
+        getCookieOptions(true, refreshExpiry)
+      )
+      .cookie("login_flag", true, getCookieOptions(false, loginFlagExpiry));
+
+    return res
+      .status(200)
       .json(
         new ApiResponse(
           200,
-          {
-            accessToken,
-            refreshToken: newRefreshToken,
-          },
-          "Access Token refreshed successfully"
+          {accessToken},
+          "Access token refreshed successfully."
         )
       );
   } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid refresh Token");
+    console.error("Refresh Token Error:", error.message);
+    throw new ApiError(401, "Invalid or Expired Refresh Token");
   }
 });
 
@@ -487,10 +487,9 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, channel, "User details fetched successfully!"));
 });
 
-
 const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
-  const { videoId } = req.body;
+  const {videoId} = req.body;
 
   if (!userId) throw new ApiError(400, "User Id is required!");
   if (!videoId) throw new ApiError(400, "Video Id is required!");
@@ -502,16 +501,16 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
   const latestTelemetry = await Telemetry.findOne({
     user: userId,
     video: videoId,
-    currentTime: { $exists: true },
+    currentTime: {$exists: true},
   })
-    .sort({ timestamp: -1 }) // latest record
+    .sort({timestamp: -1}) // latest record
     .select("currentTime timestamp");
 
   // ⛔ Agar telemetry hi nahi mili
   if (!latestTelemetry) {
-    return res.status(400).json(
-      new ApiResponse(400, null, "No telemetry found for this video.")
-    );
+    return res
+      .status(400)
+      .json(new ApiResponse(400, null, "No telemetry found for this video."));
   }
 
   const resumeTime = latestTelemetry.currentTime || 0;
@@ -533,7 +532,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
         "watchHistory.$.lastWatchedAt": watchEntry.lastWatchedAt,
       },
     },
-    { new: true }
+    {new: true}
   );
 
   // ➕ Naya add karo agar nahi tha
@@ -548,7 +547,7 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
           },
         },
       },
-      { new: true }
+      {new: true}
     );
   }
 
@@ -556,7 +555,6 @@ const addOrUpdateWatchHistory = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, null, "Watch history synced with telemetry!"));
 });
-
 
 export {
   registerUser,
