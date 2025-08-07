@@ -11,25 +11,21 @@ import {extractMetadataAndThumbnail} from "../utils/ffmpeg.js";
 import * as fs from "fs";
 import {generateThumbnailsAndVTT} from "../utils/vttMap.js";
 import path from "path";
-import { safeUnlink } from "../utils/SafeUnlink.js";
+import {safeUnlink} from "../utils/SafeUnlink.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
-  // sari queries extract kro userId k sath
-  // queries me page aur limit ko convert kro number me
-  // sirf published videos ko dikhao
-  // query ki basis py pipeline bnao
-  // agr specific user ki videos dekhna hai to usko check kro
-
-  const {page = 1, limit = 10, query, sortBy, sortType} = req.query;
-
+  const {page = 1, limit = 10, query} = req.query;
+  const currentUserId = req.user?._id;
   const pipeline = [];
 
+  // Match Published Videos Only
   pipeline.push({
     $match: {
       isPublished: true,
     },
   });
 
+  // Text Search (optional)
   if (query) {
     pipeline.push({
       $match: {
@@ -41,70 +37,55 @@ const getAllVideos = asyncHandler(async (req, res) => {
     });
   }
 
-  // if (query) {
-  //   pipeline.push({
-  //     $search: {
-  //       index: "search-videos",
-  //       text: {
-  //         query: query,
-  //         path: ["title", "description"],
-  //       },
-  //     },
-  //   });
-  // }
-
-  // if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-  //   pipeline.push({
-  //     $match: {
-  //       owner: new mongoose.Types.ObjectId(userId),
-  //     },
-  //   });
-  // }
-
-  //   if (sortBy && sortType) {
-  //     pipeline.push({
-  //       $sort: {
-  //         [sortBy]: sortType === "asc" ? 1 : -1,
-  //       },
-  //     });
-  //   } else {
-  //     pipeline.push({
-  //       $sort: {createdAt: -1},
-  //     });
-  //   }             ismein masla yeh k yeh backend sy filtering hogi har dafa database req send hogi
-
+  // Sort by createdAt descending
   pipeline.push({
-    $sort: {
-      createdAt: -1,
-    },
+    $sort: {createdAt: -1},
   });
 
+  // Lookup Owner (user)
   pipeline.push({
     $lookup: {
       from: "users",
       localField: "owner",
       foreignField: "_id",
       as: "owner",
-      pipeline: [
-        {
-          $project: {
-            fullName: 1,
-            username: 1,
-            avatar: 1,
-          },
-        },
-      ],
     },
   });
 
+  // Flatten owner array first
   pipeline.push({
     $addFields: {
       owner: {
-        $first: "$owner",
+        $cond: {
+          if: {$isArray: "$owner"},
+          then: {$first: "$owner"},
+          else: "$owner",
+        },
       },
     },
   });
 
+  // Lookup subscribers for owner
+  pipeline.push({
+    $lookup: {
+      from: "subscriptions",
+      localField: "owner._id",
+      foreignField: "channel",
+      as: "subscribers",
+    },
+  });
+  // Add subscribersCount & isSubscribedTo field
+  pipeline.push({
+    $addFields: {
+      "owner.subscribersCount": {
+        $size: "$subscribers",
+      },
+      "owner.isSubscribedTo": currentUserId
+        ? { $in: [currentUserId, "$subscribers.subscriber"] }
+        : false,
+    },
+  });
+  // Project only required fields
   pipeline.push({
     $project: {
       title: 1,
@@ -114,21 +95,29 @@ const getAllVideos = asyncHandler(async (req, res) => {
       videoFile: 1,
       views: 1,
       duration: 1,
-      owner: 1,
       createdAt: 1,
+      owner: {
+        _id: 1,
+        username: 1,
+        fullName: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscribersCount: 1,
+        isSubscribedTo: 1,
+      },
     },
   });
 
+  // Pagination
   const pageNumber = parseInt(page, 10);
   const limitNumber = parseInt(limit, 10);
-
   const options = {
     page: pageNumber,
     limit: limitNumber,
-    offset: (pageNumber - 1) * limitNumber, // Corrected pagination logic
+    offset: (pageNumber - 1) * limitNumber,
   };
-  const videoAggregate = Video.aggregate(pipeline);
 
+  const videoAggregate = Video.aggregate(pipeline);
   const video = await Video.aggregatePaginate(videoAggregate, options);
 
   return res
@@ -136,16 +125,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, video, "All videos fetched successfully"));
 });
 
-
 const publishVideo = asyncHandler(async (req, res) => {
-  const { title, description } = req.body;
-
+  const {title, description} = req.body;
 
   if (!title || !description) {
     throw new ApiError(400, "Title and description are required.");
   }
 
-  const existingVideo = await Video.findOne({ title });
+  const existingVideo = await Video.findOne({title});
   if (existingVideo) {
     throw new ApiError(400, "Video with the same title already exists.");
   }
@@ -155,13 +142,11 @@ const publishVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Video file is required.");
   }
 
-
-  const { spritePath, vttPath } = await generateThumbnailsAndVTT(videoLocalPath, {
+  const {spritePath, vttPath} = await generateThumbnailsAndVTT(videoLocalPath, {
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseBucket: "video-sprites",
   });
 
- 
   const {
     duration,
     thumbnailPath,
@@ -170,7 +155,6 @@ const publishVideo = asyncHandler(async (req, res) => {
     primaryColor,
     secondaryColor,
   } = await extractMetadataAndThumbnail(videoLocalPath);
-
 
   const safeUpload = async (filePath, bucket) => {
     try {
@@ -184,15 +168,14 @@ const publishVideo = asyncHandler(async (req, res) => {
     }
   };
 
-  const uploadedVideo     = await safeUpload(videoLocalPath, "videos");
-  const uploadedPreview   = await safeUpload(previewPath, "thumbnails");
+  const uploadedVideo = await safeUpload(videoLocalPath, "videos");
+  const uploadedPreview = await safeUpload(previewPath, "thumbnails");
   const uploadedThumbnail = await safeUpload(thumbnailPath, "thumbnails");
 
- if (!uploadedVideo || !uploadedPreview || !uploadedThumbnail) {
-  [uploadedVideo, uploadedPreview, uploadedThumbnail].forEach(safeUnlink);
-  throw new ApiError(500, "One or more uploads to Supabase failed.");
-}
-
+  if (!uploadedVideo || !uploadedPreview || !uploadedThumbnail) {
+    [uploadedVideo, uploadedPreview, uploadedThumbnail].forEach(safeUnlink);
+    throw new ApiError(500, "One or more uploads to Supabase failed.");
+  }
 
   const newVideo = await Video.create({
     videoFile: {
@@ -218,18 +201,21 @@ const publishVideo = asyncHandler(async (req, res) => {
     isPublished: true,
   });
 
-
-  const localPaths = [videoLocalPath, previewPath, thumbnailPath, spritePath, vttPath];
+  const localPaths = [
+    videoLocalPath,
+    previewPath,
+    thumbnailPath,
+    spritePath,
+    vttPath,
+  ];
   for (const file of localPaths) {
-  safeUnlink(file)
+    safeUnlink(file);
   }
-
 
   return res
     .status(200)
     .json(new ApiResponse(200, newVideo, "Video uploaded successfully."));
 });
-
 
 const getVideoById = asyncHandler(async (req, res) => {
   const {videoId} = req.params;

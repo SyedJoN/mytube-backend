@@ -5,8 +5,7 @@ import {ApiResponse} from "../utils/apiResponse.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import geoip from "geoip-lite";
 let isRecordingSession = false;
-  let updatedTime = 0;
-
+let updatedTime = 0;
 
 export const createTelemetryBatch = asyncHandler(async (req, res) => {
   let telemetryData;
@@ -115,16 +114,20 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
       console.log("true reset video", updatedTime);
     }
     if ((final === 1 && !isRecordingSession) || final === 0) continue;
+    const updateData = {
+      currentTime: updatedTime,
+      duration,
+      lastUpdated: new Date(),
+    };
 
+    if (updatedTime === 0 && !lastRec?.hasEnded) {
+      updateData.hasEnded = 1;
+    }
     operations.push({
       updateOne: {
         filter: {video: videoId, userId},
         update: {
-          $set: {
-            currentTime: updatedTime,
-            duration,
-            lastUpdated: new Date(),
-          },
+          $set: updateData,
         },
         upsert: true,
       },

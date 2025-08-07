@@ -97,7 +97,7 @@ const loginUser = asyncHandler(async (req, res) => {
   // generate access and refresh token
   // send cookie
 
-  const tokenExpiry = 15 * 60 * 1000;
+  const tokenExpiry =  15 * 60 * 1000;
   const refreshExpiry = 7 * 24 * 60 * 60 * 1000;
   const loginFlagExpiry = refreshExpiry;
 

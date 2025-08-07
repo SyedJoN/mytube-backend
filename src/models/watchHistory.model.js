@@ -7,6 +7,7 @@ const watchHistorySchema = new Schema({
   video: { type: Schema.Types.ObjectId, ref: "Video", required: true },
   currentTime: { type: Number, default: 0 },
   duration: { type: Number, default: 0 },
+  hasEnded: {type: Number, default: 0},
   lastUpdated: { type: Date, default: Date.now },
 });
 

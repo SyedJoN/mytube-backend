@@ -43,22 +43,6 @@ const userSchema = new Schema(
       url: {type: String},
       fileId: {type: String},
     },
-    watchHistory: [
-      {
-        video: {
-          type: Schema.Types.ObjectId,
-          ref: "Video",
-        },
-        duration: {
-          type: Number,
-          default: 0,
-        },
-        lastWatchedAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
   },
   {timestamps: true}
 );

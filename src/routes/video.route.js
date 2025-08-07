@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { optionalJWT } from "../middlewares/optionalJWT.js";
+
 import { deleteVideo, getAllVideos, getVideoById, incrementViews, publishVideo, togglePublishStatus, updateVideo } from "../controllers/video.controller.js";
 
 const router = Router();
 
-router.route("/all-videos").get(getAllVideos);
+router.route("/all-videos").get(optionalJWT, getAllVideos);
 
 router.route("/publish-video").post(verifyJWT, upload.single("videoFile"), publishVideo);
 
