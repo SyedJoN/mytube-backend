@@ -16,6 +16,7 @@ const telemetrySchema = new Schema(
     referrer: String,
     lact: Number,
     final: Number,
+    subscribed: Number,
     cr: String,
     st: Array,
     et: Array,

@@ -66,6 +66,7 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     cr,
     lact: e.lact,
     final: e.final || 0,
+    subscribed: e.subscribed,
     st: e.st,
     et: e.et,
     timestamp: !isNaN(e.timestamp) ? new Date(Number(e.timestamp)) : new Date(),
@@ -74,22 +75,21 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
   const operations = [];
 
   for (const tel of telemetryData) {
-    if (!userId) continue;
-
-    const {videoId, currentTime, duration, final, muted, st, et} = tel;
+    const {videoId, currentTime, duration, final, muted, st, et, anonId} = tel;
 
     const stList = st?.toString().split(",").map(parseFloat);
-
     const etList = et?.toString().split(",").map(parseFloat);
-
     const mutedList = muted ? muted.toString().split(",") : [];
-
     const allMutedSame =
       mutedList.length > 1 ? mutedList.every((m) => m === mutedList[0]) : true;
 
     const isLikelySeek =
       final === 0 && stList.length > 1 && etList.length > 1 && allMutedSame;
-    const lastRec = await WatchHistory.findOne({video: videoId, userId});
+
+    let lastRec = null;
+    if (userId) {
+      lastRec = await WatchHistory.findOne({video: videoId, userId});
+    }
 
     if (
       final === 0 &&
@@ -99,21 +99,20 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     ) {
       isRecordingSession = true;
       updatedTime = currentTime;
-      console.log("condition > 10 true", updatedTime);
     }
 
     if (isLikelySeek) {
       isRecordingSession = true;
       updatedTime = currentTime;
-      console.log("condition seek true", updatedTime);
     }
 
     if (final === 0 && duration && Math.abs(currentTime - duration) < 0.5) {
       updatedTime = 0;
       isRecordingSession = true;
-      console.log("true reset video", updatedTime);
     }
+
     if ((final === 1 && !isRecordingSession) || final === 0) continue;
+
     const updateData = {
       currentTime: updatedTime,
       duration,
@@ -123,15 +122,19 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     if (updatedTime === 0 && !lastRec?.hasEnded) {
       updateData.hasEnded = 1;
     }
-    operations.push({
-      updateOne: {
-        filter: {video: videoId, userId},
-        update: {
-          $set: updateData,
+
+    if (userId) {
+      operations.push({
+        updateOne: {
+          filter: {video: videoId, userId},
+          update: {$set: updateData},
+          upsert: true,
         },
-        upsert: true,
-      },
-    });
+      });
+    } else {
+      res.locals.guestTimestamps = res.locals.guestTimestamps || {};
+      res.locals.guestTimestamps[videoId] = updatedTime;
+    }
 
     if (final === 1) {
       isRecordingSession = false;
@@ -142,14 +145,22 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
   try {
     if (operations.length > 0) {
       await WatchHistory.bulkWrite(operations, {ordered: false});
-      console.log(`Updated ${operations.length} watch history records`);
     }
 
     await Telemetry.insertMany(docs, {ordered: false});
 
     return res
       .status(201)
-      .json(new ApiResponse(201, {insertedCount: docs.length}, "ok"));
+      .json(
+        new ApiResponse(
+          201,
+          {
+            insertedCount: docs.length,
+            guestTimestamps: res.locals.guestTimestamps || null,
+          },
+          "ok"
+        )
+      );
   } catch (err) {
     console.error("Telemetry processing error:", err);
     return res.status(400).json({success: false, error: err.message});
