@@ -6,6 +6,8 @@ import {asyncHandler} from "../utils/asyncHandler.js";
 import geoip from "geoip-lite";
 let isRecordingSession = false;
 let updatedTime = 0;
+let lastGuestTime = 0;
+
 
 export const createTelemetryBatch = asyncHandler(async (req, res) => {
   let telemetryData;
@@ -77,6 +79,8 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
   for (const tel of telemetryData) {
     const {videoId, currentTime, duration, final, muted, st, et, anonId} = tel;
 
+    let lastRec = null;
+
     const stList = st?.toString().split(",").map(parseFloat);
     const etList = et?.toString().split(",").map(parseFloat);
     const mutedList = muted ? muted.toString().split(",") : [];
@@ -86,7 +90,10 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     const isLikelySeek =
       final === 0 && stList.length > 1 && etList.length > 1 && allMutedSame;
 
-    let lastRec = null;
+    const baseCondition = userId
+      ? Math.abs(currentTime - (lastRec?.currentTime || 0)) > 10
+      : Math.abs(currentTime - (lastGuestTime || 0)) > 10;
+
     if (userId) {
       lastRec = await WatchHistory.findOne({video: videoId, userId});
     }
@@ -95,7 +102,7 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
       final === 0 &&
       stList.length < 2 &&
       etList.length < 2 &&
-      Math.abs(currentTime - (lastRec?.currentTime || 0)) > 10
+      baseCondition
     ) {
       isRecordingSession = true;
       updatedTime = currentTime;
@@ -134,6 +141,7 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     } else {
       res.locals.guestTimestamps = res.locals.guestTimestamps || {};
       res.locals.guestTimestamps[videoId] = updatedTime;
+      lastGuestTime = updatedTime;
     }
 
     if (final === 1) {
@@ -149,18 +157,16 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
 
     await Telemetry.insertMany(docs, {ordered: false});
 
-    return res
-      .status(201)
-      .json(
-        new ApiResponse(
-          201,
-          {
-            insertedCount: docs.length,
-            guestTimestamps: res.locals.guestTimestamps || null,
-          },
-          "ok"
-        )
-      );
+    return res.status(201).json(
+      new ApiResponse(
+        201,
+        {
+          insertedCount: docs.length,
+          guestTimestamps: res.locals.guestTimestamps || null,
+        },
+        "ok"
+      )
+    );
   } catch (err) {
     console.error("Telemetry processing error:", err);
     return res.status(400).json({success: false, error: err.message});
