@@ -162,12 +162,17 @@ const logoutUser = asyncHandler(async (req, res) => {
       new: true,
     }
   );
- 
+ const clearCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
+  path: "/"
+};
   return res
     .status(200)
-    .clearCookie("accessToken", getCookieOptions(true, new Date(0), false))
-    .clearCookie("refreshToken", getCookieOptions(true, new Date(0), false))
-    .clearCookie("login_flag", getCookieOptions(false, new Date(0), false))
+    .clearCookie("accessToken", clearCookieOptions)
+    .clearCookie("refreshToken", clearCookieOptions)
+    .clearCookie("login_flag", {...clearCookieOptions, httpOnly: false})
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
