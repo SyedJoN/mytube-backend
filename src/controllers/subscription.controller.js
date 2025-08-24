@@ -7,37 +7,39 @@ import { ApiResponse } from "../utils/apiResponse.js"
 
 
 const toggleSubscription = asyncHandler(async (req, res) => {
-    const {channelId} = req.params;
-    const userId = req.user?._id;
+  const { channelId } = req.params;
+  const userId = req.user?._id;
 
-    if (!channelId) {
-        throw new ApiError(400, "Id is required!")
-    }
-    if (!mongoose.Types.ObjectId.isValid(channelId)) {
-        throw new ApiError(400, "Invalid id format!")
-    }
+  if (!channelId) throw new ApiError(400, "Channel ID is required!");
+  if (!mongoose.Types.ObjectId.isValid(channelId)) throw new ApiError(400, "Invalid channel ID format!");
+  if (channelId.toString() === userId.toString()) throw new ApiError(400, "You cannot subscribe to your own channel!");
 
-  const alreadySubscribed = await Subscription.findOne({subscriber: userId, channel: channelId});
-    if (alreadySubscribed) {
-        await Subscription.findByIdAndDelete(alreadySubscribed._id);
-    } else {
-        await Subscription.create({
-            subscriber: userId,
-            channel: channelId,
-        })
-    }
+  const existing = await Subscription.findOne({ subscriber: userId, channel: channelId });
 
-    return res
-    .status(200)
-    .json(
-        new ApiResponse(
-            200,
-            {},
-             `Channel ${alreadySubscribed ? 'unsubscribed' : 'subscribed'} successfully!`
-        )
+  let action = "";
+  if (existing) {
+    await Subscription.findByIdAndDelete(existing._id);
+    action = "unsubscribed";
+  } else {
+    await Subscription.create({ subscriber: userId, channel: channelId });
+    action = "subscribed";
+  }
+
+  const subscribersCount = await Subscription.countDocuments({ channel: channelId });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { 
+        subscribersCount,
+        isSubscribedTo: action === "subscribed" 
+      },
+      `Channel ${action} successfully!`
     )
+  );
+});
 
-})
+
 
 
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {

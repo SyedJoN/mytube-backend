@@ -4,10 +4,10 @@ import {ApiError} from "../utils/ApiError.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import geoip from "geoip-lite";
+
 let isRecordingSession = false;
 let updatedTime = 0;
 let lastGuestTime = 0;
-
 
 export const createTelemetryBatch = asyncHandler(async (req, res) => {
   let telemetryData;
@@ -114,8 +114,8 @@ export const createTelemetryBatch = asyncHandler(async (req, res) => {
     }
 
     if (final === 0 && duration && Math.abs(currentTime - duration) < 0.5) {
-      updatedTime = 0;
       isRecordingSession = true;
+      updatedTime = 0;
     }
 
     if ((final === 1 && !isRecordingSession) || final === 0) continue;

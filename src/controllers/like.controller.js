@@ -1,54 +1,79 @@
 import mongoose from "mongoose";
 import {Like} from "../models/like.model.js";
-import { Dislike } from "../models/dislike.model.js";
-import { Video } from "../models/video.model.js";
-import { Comment } from "../models/comment.model.js";
+import {Dislike} from "../models/dislike.model.js";
+import {Video} from "../models/video.model.js";
+import {Comment} from "../models/comment.model.js";
 import {ApiError} from "../utils/ApiError.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 
+const toggleLike = (entity) =>
+  asyncHandler(async (req, res) => {
+    const {id} = req.params;
+    const {videoId} = req.params;
+    const userId = req.user?._id;
 
+    if (!id) throw new ApiError(400, `${entity} ID is required!`);
+    if (!mongoose.Types.ObjectId.isValid(id))
+      throw new ApiError(400, `Invalid ${entity} ID format!`);
 
-const toggleLike = (entity) => asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user?._id;
+    const likeQuery = {[entity]: id, likedBy: userId};
+    const dislikeQuery = {[entity]: id, dislikedBy: userId};
 
-  if (!id) throw new ApiError(400, `${entity} ID is required!`);
-  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, `Invalid ${entity} ID format!`);
+    let entityExists;
 
-  const likeQuery = { [entity]: id, likedBy: userId };
-  const dislikeQuery = { [entity]: id, dislikedBy: userId };
+    if (entity === "video") {
+      entityExists = await Video.findById(id);
+    } else if (entity === "comment") {
+      entityExists = await Comment.findById(id);
+    } else {
+      throw new ApiError(
+        400,
+        "Invalid entity type! Must be 'video' or 'comment'."
+      );
+    }
 
-  let entityExists;
+    if (!entityExists) {
+      throw new ApiError(404, `${entity} not found!`);
+    }
 
-  if (entity === "video") {
-    entityExists = await Video.findById(id);
-  } else if (entity === "comment") {
-    entityExists = await Comment.findById(id);
-  } else {
-    throw new ApiError(400, "Invalid entity type! Must be 'video' or 'comment'.");
-  }
+    const existingDislike = await Dislike.findOne(dislikeQuery);
+    if (existingDislike) {
+      await Dislike.findByIdAndDelete(existingDislike._id);
+    }
 
-  if (!entityExists) {
-    throw new ApiError(404, `${entity} not found!`);
-  }
+    const existingLike = await Like.findOne(likeQuery);
+    if (existingLike) {
+      await Like.findByIdAndDelete(existingLike._id);
+const likesCount = await Like.countDocuments({ [entity]: id });
 
+      const likedBy = await Like.find({[entity]: id}).distinct("likedBy");
+      return res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            likesCount,
+            likedBy,
+          },
+          `${entity} unliked successfully!`
+        )
+      );
+    }
 
-  const existingDislike = await Dislike.findOne(dislikeQuery);
-  if (existingDislike) {
-    await Dislike.findByIdAndDelete(existingDislike._id);
-  }
-
-
-  const existingLike = await Like.findOne(likeQuery);
-  if (existingLike) {
-    await Like.findByIdAndDelete(existingLike._id);
-    return res.status(200).json(new ApiResponse(200, {}, `${entity} unliked successfully!`));
-  }
-
-  await Like.create(likeQuery);
-  return res.status(200).json(new ApiResponse(200, {}, `${entity} liked successfully!`));
-});
+    await Like.create(likeQuery);
+const likesCount = await Like.countDocuments({ [entity]: id });
+    const likedBy = await Like.find({ [entity]: id }).distinct("likedBy");
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          likesCount,
+          likedBy,
+        },
+        `${entity} liked successfully!`
+      )
+    );
+  });
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
   const {videoId} = req.params;

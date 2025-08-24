@@ -244,7 +244,7 @@ const getVideoById = asyncHandler(async (req, res) => {
 
   videoWithLikes.likesCount = likesCount;
   videoWithLikes.likedBy = likedBy.map((like) => like.likedBy);
-  videoWithLikes.disLikedBy = dislikedBy.map((dislike) => dislike.dislikedBy);
+  videoWithLikes.dislikedBy = dislikedBy.map((dislike) => dislike.dislikedBy);
 
   return res
     .status(200)
