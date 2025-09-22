@@ -20,12 +20,12 @@ const toggleLike = (entity) =>
     const likeQuery = {[entity]: id, likedBy: userId};
     const dislikeQuery = {[entity]: id, dislikedBy: userId};
 
-    let entityExists;
+    let entityModel;
 
     if (entity === "video") {
-      entityExists = await Video.findById(id);
+      entityModel = Video;
     } else if (entity === "comment") {
-      entityExists = await Comment.findById(id);
+      entityModel = Comment;
     } else {
       throw new ApiError(
         400,
@@ -33,7 +33,7 @@ const toggleLike = (entity) =>
       );
     }
 
-    if (!entityExists) {
+    if (!entityModel) {
       throw new ApiError(404, `${entity} not found!`);
     }
 
@@ -45,9 +45,14 @@ const toggleLike = (entity) =>
     const existingLike = await Like.findOne(likeQuery);
     if (existingLike) {
       await Like.findByIdAndDelete(existingLike._id);
-const likesCount = await Like.countDocuments({ [entity]: id });
+
+      const likesCount = await Like.countDocuments({[entity]: id});
 
       const likedBy = await Like.find({[entity]: id}).distinct("likedBy");
+
+            if (entity === "comment") {
+        await Comment.findByIdAndUpdate(id, {$inc: {likesCount: -1}});
+      }
       return res.status(200).json(
         new ApiResponse(
           200,
@@ -61,8 +66,11 @@ const likesCount = await Like.countDocuments({ [entity]: id });
     }
 
     await Like.create(likeQuery);
-const likesCount = await Like.countDocuments({ [entity]: id });
-    const likedBy = await Like.find({ [entity]: id }).distinct("likedBy");
+    const likesCount = await Like.countDocuments({[entity]: id});
+    const likedBy = await Like.find({[entity]: id}).distinct("likedBy");
+    if (entity === "comment") {
+      await Comment.findByIdAndUpdate(id, { $inc: { likesCount: 1 } });
+    }
     return res.status(200).json(
       new ApiResponse(
         200,

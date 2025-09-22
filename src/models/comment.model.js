@@ -8,6 +8,7 @@ const commentSchema = new Schema(
     video: { type: Schema.Types.ObjectId, ref: "Video", required: true },
     isEdited: { type: Boolean, default: false },
     parentCommentId: { type: Schema.Types.ObjectId, ref: "Comment", default: null }, // Only track parent, no "replies" field!
+    likesCount: { type: Number, default: 0 }, 
   },
   { timestamps: true }
 );

@@ -22,7 +22,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
     video: videoId,
     parentCommentId: null,
   })
-    .sort({createdAt: -1})
+    .sort({likesCount: -1, createdAt: -1 })
     .populate("owner", "username avatar")
     .lean();
 
